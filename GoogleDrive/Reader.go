@@ -130,13 +130,13 @@ func (this *Reader) download(chunk uint) error {
 	for {
 		size, err := Download(this.fileIDs[chunk], this.cache)
 		fmt.Println(size, this.chunkSize[chunk], err)
-		if err != nil && size != this.chunkSize[chunk] {
 			fmt.Fprintf(os.Stderr, "\033[2KDownload of chunk %d failed for a total of %s Retrying...\r", this.chunk, humanize.IBytes(uint64(this.Total)+uint64(this.chunkPos)))
+		if err != nil || size != this.chunkSize[chunk] {
 			time.Sleep(time.Microsecond * 250)
 			continue
 		}
 
-		this.Total += int64(this.chunkPos)
+		this.Total += int64(size)
 		this.chunkPos = 0
 		fmt.Fprintf(os.Stderr, "\033[2KDownloaded chunk %d for a total of %s.\n", this.chunk, humanize.IBytes(uint64(this.Total)))
 		break
