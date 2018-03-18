@@ -20,7 +20,7 @@ func uploadCommand() {
 		fmt.Fprintf(os.Stderr, "Uploading file encrypted with %s and authenticated by %s. UUID: %s\n", settings.Encryption, settings.Authentication, id.String())
 
 		filename := generateFileBaseName(*filename, id.String(), settings, true)
-		uploader, err := GoogleDrive.NewGoogleDriveWriter(filename, parent, 64*1024*1024)
+		uploader, err := GoogleDrive.NewGoogleDriveWriter(filename, id.String(), parent, 16*1024*1024)
 		if err != nil {
 			panic(err)
 		}
@@ -34,10 +34,10 @@ func uploadCommand() {
 			BlockMaxSize:    4 << 20,
 			HighCompression: false,
 		}
-
 		defer compress.Close()
 
-		_, err = io.Copy(compress, os.Stdin)
+		multiwriter := io.MultiWriter(compress)
+		_, err = io.Copy(multiwriter, os.Stdin)
 		if err != nil {
 			panic(err)
 		}

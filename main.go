@@ -31,7 +31,7 @@ var (
 	encryption     = flag.String("encryption", "NONE", "Define the encryption to use")
 	folder         = flag.String("folder", "OZB", "Folder on Google Drive to backup to/from")
 	passphrase     = flag.String("passphrase", "", "Passphrase to use to en-/decrypt and for authentication")
-	quota          = flag.Bool("quota", false, "Define to see Google Drive quota used (non-exclusive)")
+	quota          = flag.Bool("quota", false, "Define to see Google Drive quota used before continuing")
 )
 
 func main() {
@@ -49,9 +49,11 @@ func main() {
 		GoogleDrive.ListFiles(parent)
 		os.Exit(0)
 	case *download:
-		//parent = GoogleDrive.FindOrCreateFolder(*folder)
-		fmt.Fprintln(os.Stderr, "Not yet implemented")
-		os.Exit(1)
+		if *filename == "" {
+			fmt.Fprintln(os.Stderr, "Please set a filename")
+			os.Exit(1)
+		}
+		downloadCommand()
 	case *upload:
 		if *filename == "" {
 			fmt.Fprintln(os.Stderr, "Please set a filename")

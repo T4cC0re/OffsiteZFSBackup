@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-const CACHE_FILENAME = "OZBCache"
+const WRITE_CACHE_FILENAME = "OZBWriteCache"
 
 var E_WRITER_CLOSED = errors.New("writer closed")
 
@@ -24,14 +24,15 @@ type Writer struct {
 	written      int
 	Total        int64
 	cacheSize    int
-	chunk        int
+	chunk        uint
 	fileNameBase string
 	parentID     string
 	closed       bool
+	uuid         string
 }
 
-func NewGoogleDriveWriter(fileNameBase string, parentID string, cacheSize int) (*Writer, error) {
-	cache, err := ioutil.TempFile("", CACHE_FILENAME)
+func NewGoogleDriveWriter(fileName string, uuid string, parentID string, cacheSize int) (*Writer, error) {
+	cache, err := ioutil.TempFile("", WRITE_CACHE_FILENAME)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +47,7 @@ func NewGoogleDriveWriter(fileNameBase string, parentID string, cacheSize int) (
 		return nil, err
 	}
 
-	writer := &Writer{cache: cache, written: 0, chunk: 0, fileNameBase: fileNameBase, parentID: parentID, cacheSize: cacheSize, closed: false}
+	writer := &Writer{cache: cache, written: 0, chunk: 0, fileNameBase: fileName, parentID: parentID, cacheSize: cacheSize, closed: false, uuid: uuid}
 	return writer, nil
 }
 
@@ -63,12 +64,14 @@ func (this *Writer) upload() error {
 			return err
 		}
 
-		driveFile, err := Upload(fmt.Sprintf("%s|%08d", this.fileNameBase, this.chunk), this.parentID, this.cache)
+		driveFile, err := Upload(fmt.Sprintf("%s|%d", this.fileNameBase, this.chunk), this.uuid, this.parentID, this.cache)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "\033[2KUpload of chunk %d failed for a total of %s Retrying...\r", this.chunk, humanize.IBytes(uint64(this.Total)+uint64(this.written)))
 			time.Sleep(time.Microsecond * 250)
 			continue
 		}
+
+		fmt.Println(driveFile)
 
 		this.Total += int64(this.written)
 		this.written = 0

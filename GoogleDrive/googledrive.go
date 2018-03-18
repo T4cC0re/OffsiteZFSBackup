@@ -24,10 +24,45 @@ var (
 	E_NOPARENT = errors.New("no parent found")
 )
 
-func Upload(name string, parent string, reader io.Reader) (*drive.File, error) {
+func Upload(name string, uuid string, parent string, reader io.Reader) (*drive.File, error) {
 	parents := make([]string, 1)
 	parents[0] = parent
-	return srv.Files.Create(&drive.File{Name: name, Parents: parents}).Media(reader).Do()
+	properties := make(map[string]string)
+	properties["OZB_uuid"] = uuid
+	properties["OZB"] = "true"
+	return srv.Files.Create(&drive.File{Name: name, Parents: parents, AppProperties: properties}).Media(reader).Do()
+}
+
+func Download(fileId string, writer *os.File) (int64, error) {
+	_, err := writer.Seek(0, 0)
+	if err != nil {
+		return 0, err
+	}
+	err = writer.Truncate(0)
+	if err != nil {
+		return 0, err
+	}
+
+	res, err := srv.Files.
+		Get(fileId).
+		AcknowledgeAbuse(true).
+		Download()
+	if err != nil {
+		return 0, err
+	}
+	defer res.Body.Close()
+
+	n, err := io.Copy(writer, res.Body)
+	if err != nil {
+		return 0, err
+	}
+
+	err = writer.Sync()
+	if err != nil {
+		return 0, err
+	}
+
+	return n, err
 }
 
 type ParentFilter struct {
@@ -50,7 +85,11 @@ func findId(wanted string, parentID string) (string, error) {
 }
 
 func findInFolder(parentID string) (*drive.FileList, error) {
-	return srv.Files.List().Fields("nextPageToken, files").Q("'" + parentID + "' in parents AND trashed = false").Do()
+	return srv.Files.
+		List().
+		Fields("nextPageToken, files").
+		Q("'" + parentID + "' in parents AND trashed = false AND appProperties has { key='OZB' and value='true'}").
+		Do()
 }
 
 // getClient uses a Context and Config to retrieve a Token
@@ -184,8 +223,10 @@ func ListFiles(parent string) {
 
 	for _, file := range files.Files {
 		fmt.Fprintf(os.Stderr, "ITEM: %s\tMD5: %s\tSize: %d (%s)\tID: %s\n", file.Name, file.Md5Checksum, file.Size, humanize.IBytes(uint64(file.Size)), file.Id)
+		fmt.Fprintf(os.Stderr, file.Properties["OZB_uuid"])
 	}
 }
+
 func FindOrCreateFolder(name string) string {
 	parent, err := findId(name, "root")
 	if err != nil {
