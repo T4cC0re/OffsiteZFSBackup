@@ -45,7 +45,7 @@ func Download(fileId string, writer *os.File) (int64, error) {
 
 	res, err := srv.Files.
 		Get(fileId).
-		AcknowledgeAbuse(true).
+		//AcknowledgeAbuse(true).
 		Download()
 	if err != nil {
 		return 0, err
@@ -58,6 +58,11 @@ func Download(fileId string, writer *os.File) (int64, error) {
 	}
 
 	err = writer.Sync()
+	if err != nil {
+		return 0, err
+	}
+
+	_, err = writer.Seek(0, 0)
 	if err != nil {
 		return 0, err
 	}

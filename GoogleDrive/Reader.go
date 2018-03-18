@@ -94,7 +94,6 @@ func NewGoogleDriveReader(uuid string, parentID string) (*Reader, error) {
 		return nil, err
 	}
 
-	fmt.Println(reader.fileIDs)
 
 	// Make sure we got all chunks available
 	var maxIndex uint = 0
@@ -107,13 +106,12 @@ func NewGoogleDriveReader(uuid string, parentID string) (*Reader, error) {
 		return nil, E_CHUNKS_MISSING
 	}
 
-	fmt.Println(reader.fileIDs)
+	reader.download(0)
 
 	return reader, nil
 }
 
 func (this *Reader) gatherChunkInfo(fileList *drive.FileList) error {
-	fmt.Println(fileList.Files)
 	for _, file := range fileList.Files {
 		chunkInfo, err := parseFileName(file.Name)
 		if err != nil {
