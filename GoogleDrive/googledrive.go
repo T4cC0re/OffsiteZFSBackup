@@ -2,6 +2,7 @@ package GoogleDrive
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -10,14 +11,13 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
-	"errors"
 
+	"github.com/dustin/go-humanize"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/drive/v3"
 	"io"
-	"github.com/dustin/go-humanize"
 )
 
 var (
@@ -31,14 +31,14 @@ func Upload(name string, parent string, reader io.Reader) (*drive.File, error) {
 }
 
 type ParentFilter struct {
-	Parent string
+	Parent       string
 	WantedParent string
-	Qualifying []string
+	Qualifying   []string
 }
 
 func findId(wanted string, parentID string) (string, error) {
-	p := ParentFilter{Parent:"", WantedParent: wanted}
-	fileList, err := srv.Files.List().Fields("nextPageToken, files(id, name, parents)").Q("name = '" + p.WantedParent +  "' AND '" + parentID + "' in parents AND trashed = false").Do()
+	p := ParentFilter{Parent: "", WantedParent: wanted}
+	fileList, err := srv.Files.List().Fields("nextPageToken, files(id, name, parents)").Q("name = '" + p.WantedParent + "' AND '" + parentID + "' in parents AND trashed = false").Do()
 	if err != nil {
 		return "", err
 	}
@@ -48,7 +48,6 @@ func findId(wanted string, parentID string) (string, error) {
 
 	return "", E_NOPARENT
 }
-
 
 func findInFolder(parentID string) (*drive.FileList, error) {
 	return srv.Files.List().Fields("nextPageToken, files").Q("'" + parentID + "' in parents AND trashed = false").Do()
@@ -172,14 +171,16 @@ func getQuota() (*Quota, error) {
 }
 
 func createFolder(name string) (string, error) {
-	f := drive.File{Name:name, MimeType: "application/vnd.google-apps.folder"}
+	f := drive.File{Name: name, MimeType: "application/vnd.google-apps.folder"}
 	res, err := srv.Files.Create(&f).Fields("id").Do()
 	return res.Id, err
 }
 
 func ListFiles(parent string) {
 	files, err := findInFolder(parent)
-	if err != nil{panic(err)}
+	if err != nil {
+		panic(err)
+	}
 
 	for _, file := range files.Files {
 		fmt.Fprintf(os.Stderr, "ITEM: %s\tMD5: %s\tSize: %d (%s)\tID: %s\n", file.Name, file.Md5Checksum, file.Size, humanize.IBytes(uint64(file.Size)), file.Id)

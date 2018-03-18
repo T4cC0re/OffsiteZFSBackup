@@ -1,12 +1,12 @@
 package GoogleDrive
 
 import (
-	"io"
-	"os"
-	"fmt"
 	"errors"
+	"fmt"
 	"github.com/dustin/go-humanize"
+	"io"
 	"io/ioutil"
+	"os"
 	"time"
 )
 
@@ -19,15 +19,15 @@ var E_WRITER_CLOSED = errors.New("writer closed")
 // It simply forwards the Read() call, while displaying
 // the results from individual calls to it.
 type Writer struct {
-  io.Writer
-  cache *os.File
-  written int
-  Total int64
-  cacheSize int
-  chunk int
+	io.Writer
+	cache        *os.File
+	written      int
+	Total        int64
+	cacheSize    int
+	chunk        int
 	fileNameBase string
-	parentID string
-	closed bool
+	parentID     string
+	closed       bool
 }
 
 func NewGoogleDriveWriter(fileNameBase string, parentID string, cacheSize int) (*Writer, error) {
@@ -36,7 +36,7 @@ func NewGoogleDriveWriter(fileNameBase string, parentID string, cacheSize int) (
 		return nil, err
 	}
 
-	_, err = cache.Seek(0,0)
+	_, err = cache.Seek(0, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +46,7 @@ func NewGoogleDriveWriter(fileNameBase string, parentID string, cacheSize int) (
 		return nil, err
 	}
 
-	writer := &Writer{cache: cache, written: 0, chunk:0, fileNameBase:fileNameBase, parentID:parentID, cacheSize: cacheSize, closed: false}
+	writer := &Writer{cache: cache, written: 0, chunk: 0, fileNameBase: fileNameBase, parentID: parentID, cacheSize: cacheSize, closed: false}
 	return writer, nil
 }
 
@@ -56,17 +56,16 @@ func (this *Writer) upload() error {
 		return err
 	}
 
-
-	fmt.Fprintf(os.Stderr, "\033[2KUploading chunk %d for a total of %s...\r", this.chunk, humanize.IBytes(uint64(this.Total) + uint64(this.written)))
+	fmt.Fprintf(os.Stderr, "\033[2KUploading chunk %d for a total of %s...\r", this.chunk, humanize.IBytes(uint64(this.Total)+uint64(this.written)))
 	for {
-		_, err = this.cache.Seek(0,0)
+		_, err = this.cache.Seek(0, 0)
 		if err != nil {
 			return err
 		}
 
 		driveFile, err := Upload(fmt.Sprintf("%s|%08d", this.fileNameBase, this.chunk), this.parentID, this.cache)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "\033[2KUpload of chunk %d failed for a total of %s Retrying...\r", this.chunk, humanize.IBytes(uint64(this.Total) + uint64(this.written)))
+			fmt.Fprintf(os.Stderr, "\033[2KUpload of chunk %d failed for a total of %s Retrying...\r", this.chunk, humanize.IBytes(uint64(this.Total)+uint64(this.written)))
 			time.Sleep(time.Microsecond * 250)
 			continue
 		}
@@ -74,11 +73,11 @@ func (this *Writer) upload() error {
 		this.Total += int64(this.written)
 		this.written = 0
 		fmt.Fprintf(os.Stderr, "\033[2KUploaded chunk %d for a total of %s. ID: %s\n", this.chunk, humanize.IBytes(uint64(this.Total)), driveFile.Id)
-		this.chunk ++
+		this.chunk++
 		break
 	}
 
-	_, err = this.cache.Seek(0,0)
+	_, err = this.cache.Seek(0, 0)
 	if err != nil {
 		return err
 	}
@@ -101,7 +100,7 @@ func (this *Writer) writeSync(p []byte) (int64, error) {
 	}
 
 	this.written += n
-	curloc, err := this.cache.Seek(0,1)
+	curloc, err := this.cache.Seek(0, 1)
 	if err != nil {
 		return int64(this.written), err
 	}
@@ -148,7 +147,9 @@ func (this *Writer) Write(p []byte) (int, error) {
 }
 
 func (this *Writer) Close() error {
-	if this.closed { return nil } // Ignore double closes
+	if this.closed {
+		return nil
+	} // Ignore double closes
 
 	err := this.upload()
 	if err != nil {

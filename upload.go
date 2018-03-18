@@ -1,15 +1,15 @@
 package main
 
 import (
-	"github.com/satori/go.uuid"
 	"./GoogleDrive"
 	"fmt"
-	"os"
-	"io"
 	"github.com/pierrec/lz4"
+	"github.com/satori/go.uuid"
+	"io"
+	"os"
 )
 
-func uploadCommand () {
+func uploadCommand() {
 	parent := GoogleDrive.FindOrCreateFolder(*folder)
 
 	stat, _ := os.Stdin.Stat()
@@ -20,8 +20,10 @@ func uploadCommand () {
 		fmt.Fprintf(os.Stderr, "Uploading file encrypted with %s and authenticated by %s. UUID: %s\n", settings.Encryption, settings.Authentication, id.String())
 
 		filename := generateFileBaseName(*filename, id.String(), settings, true)
-		uploader, err := GoogleDrive.NewGoogleDriveWriter(filename, parent, 64 * 1024 * 1024)
-		if err != nil{panic(err)}
+		uploader, err := GoogleDrive.NewGoogleDriveWriter(filename, parent, 64*1024*1024)
+		if err != nil {
+			panic(err)
+		}
 		defer uploader.Close()
 
 		compress := lz4.NewWriter(uploader)
@@ -36,11 +38,17 @@ func uploadCommand () {
 		defer compress.Close()
 
 		_, err = io.Copy(compress, os.Stdin)
-		if err != nil{panic(err)}
+		if err != nil {
+			panic(err)
+		}
 		err = compress.Close()
-		if err != nil{panic(err)}
+		if err != nil {
+			panic(err)
+		}
 		err = uploader.Close()
-		if err != nil{panic(err)}
+		if err != nil {
+			panic(err)
+		}
 
 		defer func() {
 			fmt.Fprint(os.Stderr, "TODO: Write metadata file and create HMAC!\n")
