@@ -33,7 +33,8 @@ func Upload(name string, uuid string, parent string, reader io.Reader) (*drive.F
 	return srv.Files.Create(&drive.File{Name: name, Parents: parents, AppProperties: properties}).Media(reader).Do()
 }
 
-func Download(fileId string, writer *os.File) (int64, error) {
+func Download(fileId string, md5 string, writer *os.File) (int64, error) {
+	//TODO: check MD5!
 	_, err := writer.Seek(0, 0)
 	if err != nil {
 		return 0, err

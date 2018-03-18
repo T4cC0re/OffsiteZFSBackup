@@ -31,6 +31,7 @@ type Reader struct {
 	parentID  string
 	closed    bool
 	fileIDs   map[uint]string
+	fileMD5s  map[uint]string
 	chunkSize map[uint]int64
 	hitEOF    bool
 }
@@ -82,8 +83,9 @@ func NewGoogleDriveReader(uuid string, parentID string) (*Reader, error) {
 	if err != nil {
 		return nil, err
 	}
-	reader := &Reader{cache: cache, chunkPos: 0, chunk: 0, uuid: uuid, parentID: parentID, closed: false, chunkSize: make(map[uint]int64), fileIDs: make(map[uint]string), hitEOF: false}
+	reader := &Reader{cache: cache, chunkPos: 0, chunk: 0, uuid: uuid, parentID: parentID, closed: false, chunkSize: make(map[uint]int64), fileIDs: make(map[uint]string), fileMD5s: make(map[uint]string), hitEOF: false}
 
+	// TODO: Limit fields to fetch!
 	err = srv.Files.
 		List().
 		Fields("nextPageToken, files").
@@ -93,7 +95,6 @@ func NewGoogleDriveReader(uuid string, parentID string) (*Reader, error) {
 	if err != nil {
 		return nil, err
 	}
-
 
 	// Make sure we got all chunks available
 	var maxIndex uint = 0
@@ -119,6 +120,7 @@ func (this *Reader) gatherChunkInfo(fileList *drive.FileList) error {
 		}
 
 		this.fileIDs[chunkInfo.Chunk] = file.Id
+		this.fileMD5s[chunkInfo.Chunk] = file.Md5Checksum
 		this.chunkSize[chunkInfo.Chunk] = file.Size
 	}
 
@@ -128,9 +130,9 @@ func (this *Reader) gatherChunkInfo(fileList *drive.FileList) error {
 func (this *Reader) download(chunk uint) error {
 	fmt.Fprintf(os.Stderr, "\033[2KDownloading chunk %d for a total of %s...\r", this.chunk, humanize.IBytes(uint64(this.Total)+uint64(this.chunkPos)))
 	for {
-		size, err := Download(this.fileIDs[chunk], this.cache)
+		size, err := Download(this.fileIDs[chunk], this.fileMD5s[chunk], this.cache)
 		fmt.Println(size, this.chunkSize[chunk], err)
-			fmt.Fprintf(os.Stderr, "\033[2KDownload of chunk %d failed for a total of %s Retrying...\r", this.chunk, humanize.IBytes(uint64(this.Total)+uint64(this.chunkPos)))
+			fmt.Fprintf(os.Stderr, "\033[2KDownload of chunk %d failed for a total of %s Retrying...\r", this.chunk, humanize.IBytes(uint64(this.Total + size)))
 		if err != nil || size != this.chunkSize[chunk] {
 			time.Sleep(time.Microsecond * 250)
 			continue
