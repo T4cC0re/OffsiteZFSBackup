@@ -9,8 +9,6 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"regexp"
-	"strconv"
 	"time"
 )
 
@@ -36,38 +34,6 @@ type Reader struct {
 	hitEOF    bool
 }
 
-var chunkInfoRegexp = regexp.MustCompile(`(?mi)^([a-z0-9]{8}-[a-z0-9]{4}-4[a-z0-9]{3}-[89ab][a-z0-9]{3}-[a-z0-9]{12})\|([^|]+)\|([^|]+)\|([^|]+)\|(D|M)\|(\d+)$`)
-
-func parseFileName(filename string) (*ChunkInfo, error) {
-	matches := chunkInfoRegexp.FindStringSubmatch(filename)
-	if matches == nil || len(matches) != 7 {
-		return nil, E_CHUNKINFO
-	}
-	//TODO: Read this from appProperties, but keep something like this for recovery of those attributes
-	chunkInfo := ChunkInfo{}
-	chunkInfo.Uuid = matches[1]
-	chunkInfo.FileName = matches[2]
-	chunkInfo.Encryption = matches[3]
-	chunkInfo.Authentication = matches[4]
-	chunkInfo.IsData = matches[5] == "D"
-	chunk, err := strconv.ParseUint(matches[6], 10, 32)
-	if err != nil {
-		return nil, err
-	}
-	chunkInfo.Chunk = uint(chunk)
-
-	return &chunkInfo, nil
-}
-
-type ChunkInfo struct {
-	Uuid           string
-	FileName       string
-	Encryption     string
-	Authentication string
-	IsData         bool
-	Chunk          uint
-}
-
 func NewGoogleDriveReader(uuid string, parentID string) (*Reader, error) {
 	cache, err := ioutil.TempFile("", READ_CACHE_FILENAME)
 	if err != nil {
@@ -91,7 +57,7 @@ func NewGoogleDriveReader(uuid string, parentID string) (*Reader, error) {
 	err = srv.Files.
 		List().
 		Fields("nextPageToken, files").
-		Q("appProperties has { key='OZB_uuid' and value='"+uuid+"' }").
+		Q("properties has { key='OZB_uuid' and value='"+uuid+"' }").
 		Pages(context.Background(), reader.gatherChunkInfo)
 
 	if err != nil {
@@ -116,7 +82,7 @@ func NewGoogleDriveReader(uuid string, parentID string) (*Reader, error) {
 
 func (this *Reader) gatherChunkInfo(fileList *drive.FileList) error {
 	for _, file := range fileList.Files {
-		chunkInfo, err := parseFileName(file.Name)
+		chunkInfo, err := ParseFileName(file.Name)
 		if err != nil {
 			return err
 		}

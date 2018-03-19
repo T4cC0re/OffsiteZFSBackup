@@ -19,6 +19,8 @@ import (
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/drive/v3"
 	"io"
+	"regexp"
+	"strconv"
 	"time"
 )
 
@@ -27,13 +29,69 @@ var (
 	E_BACKEND_HASH_MISMATCH = errors.New("hash of remote file differs from local file")
 )
 
+type MetadataBase struct {
+	Uuid           string
+	FileName       string
+	Encryption     string
+	Authentication string
+	IsData         bool
+}
+
+type Metadata struct {
+	Uuid           string
+	FileName       string
+	Encryption     string
+	Authentication string
+	HMAC           string
+	IV             string
+}
+
+type ChunkInfo struct {
+	MetadataBase
+	Chunk uint
+}
+
+var chunkInfoRegexp = regexp.MustCompile(`(?mi)^([a-z0-9]{8}-[a-z0-9]{4}-4[a-z0-9]{3}-[89ab][a-z0-9]{3}-[a-z0-9]{12})\|([^|]+)\|([^|]+)\|([^|]+)\|(D|M)\|(\d+)$`)
+
+func ParseFileName(filename string) (*ChunkInfo, error) {
+	matches := chunkInfoRegexp.FindStringSubmatch(filename)
+	if matches == nil || len(matches) != 7 {
+		return nil, E_CHUNKINFO
+	}
+
+	chunkInfo := ChunkInfo{}
+	chunkInfo.Uuid = matches[1]
+	chunkInfo.FileName = matches[2]
+	chunkInfo.Encryption = matches[3]
+	chunkInfo.Authentication = matches[4]
+	chunkInfo.IsData = matches[5] == "D"
+	chunk, err := strconv.ParseUint(matches[6], 10, 32)
+	if err != nil {
+		return nil, err
+	}
+
+	chunkInfo.Chunk = uint(chunk)
+
+	return &chunkInfo, nil
+}
+
+func UploadMetadata(meta *Metadata) *Metadata {
+	metaBytes, err := json.Marshal(meta)
+	if err != nil {
+		return nil
+	}
+	fmt.Fprintln(os.Stderr, string(metaBytes))
+
+	return meta
+}
+
 func Upload(name string, uuid string, parent string, reader io.Reader, opt_wantedMD5 string) (*drive.File, error) {
 	parents := make([]string, 1)
 	parents[0] = parent
 	properties := make(map[string]string)
 	properties["OZB_uuid"] = uuid
 	properties["OZB"] = "true"
-	file, err := srv.Files.Create(&drive.File{Name: name, Parents: parents, AppProperties: properties}).Media(reader).Do()
+	file, err := srv.Files.Create(&drive.File{Name: name, Parents: parents, Properties: properties}).Media(reader).Do()
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +194,7 @@ func findInFolder(parentID string) (*drive.FileList, error) {
 	return srv.Files.
 		List().
 		Fields("nextPageToken, files").
-		Q("'" + parentID + "' in parents AND trashed = false AND appProperties has { key='OZB' and value='true'}").
+		Q("'" + parentID + "' in parents AND trashed = false AND properties has { key='OZB' and value='true'}").
 		Do()
 }
 

@@ -2,6 +2,7 @@ package GoogleDrive
 
 import (
 	"crypto/md5"
+	//"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/dustin/go-humanize"
@@ -21,7 +22,7 @@ var E_WRITER_CLOSED = errors.New("writer closed")
 // It simply forwards the Read() call, while displaying
 // the results from individual calls to it.
 type Writer struct {
-	io.Writer
+	io.WriteCloser
 	cache        *os.File
 	written      int
 	Total        int64
