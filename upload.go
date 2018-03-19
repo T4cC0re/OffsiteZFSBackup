@@ -18,7 +18,7 @@ import (
 
 func panicIfNoPassphrase() {
 	if *passphrase == "" {
-		panic(errors.New("Must specify passphrase for encryption and/or authentication"))
+		panic(errors.New("must specify passphrase for encryption and/or authentication"))
 	}
 }
 

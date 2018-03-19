@@ -27,7 +27,7 @@ var (
 	filename       = flag.String("filename", "", "Filename to upload/download")
 	list           = flag.Bool("list", false, "List files available")
 	download       = flag.Bool("download", false, "Define to download to stdout")
-	authentication = flag.String("authentication", "HMAC-SHA512", "Define the authentication to use")
+	authentication = flag.String("authentication", "HMAC-SHA3-512", "Define the authentication to use (NONE, HMAC-SHA[3-]{256,512})")
 	encryption     = flag.String("encryption", "NONE", "Define the encryption to use")
 	folder         = flag.String("folder", "OZB", "Folder on Google Drive to backup to/from")
 	passphrase     = flag.String("passphrase", "", "Passphrase to use to en-/decrypt and for authentication")
