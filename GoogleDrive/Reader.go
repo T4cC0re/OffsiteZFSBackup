@@ -3,6 +3,7 @@ package GoogleDrive
 import (
 	"errors"
 	"fmt"
+	"github.com/dustin/go-humanize"
 	"golang.org/x/net/context"
 	"google.golang.org/api/drive/v3"
 	"io"
@@ -11,7 +12,6 @@ import (
 	"regexp"
 	"strconv"
 	"time"
-	"github.com/dustin/go-humanize"
 )
 
 const READ_CACHE_FILENAME = "OZBReadCache"
@@ -187,7 +187,7 @@ func (this *Reader) Read(p []byte) (int, error) {
 		}
 		restToRead := wantToRead - availableToRead
 
-		lastChunk := int(this.chunk + 1) == len(this.fileIDs)
+		lastChunk := int(this.chunk+1) == len(this.fileIDs)
 		if lastChunk {
 			copy(p, read1)
 			this.hitEOF = true

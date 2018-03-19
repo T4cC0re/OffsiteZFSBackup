@@ -1,15 +1,15 @@
 package GoogleDrive
 
 import (
+	"crypto/md5"
 	"errors"
 	"fmt"
 	"github.com/dustin/go-humanize"
+	"hash"
 	"io"
 	"io/ioutil"
 	"os"
 	"time"
-	"crypto/md5"
-	"hash"
 )
 
 const WRITE_CACHE_FILENAME = "OZBWriteCache"
@@ -31,8 +31,7 @@ type Writer struct {
 	parentID     string
 	closed       bool
 	uuid         string
-	hash 		 hash.Hash
-
+	hash         hash.Hash
 }
 
 func NewGoogleDriveWriter(fileName string, uuid string, parentID string, cacheSize int) (*Writer, error) {

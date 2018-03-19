@@ -12,21 +12,20 @@ import (
 	"os/user"
 	"path/filepath"
 
+	"crypto/md5"
 	"github.com/dustin/go-humanize"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/drive/v3"
 	"io"
-	"crypto/md5"
 	"time"
 )
 
 var (
-	E_NOPARENT = errors.New("no parent found")
+	E_NOPARENT              = errors.New("no parent found")
 	E_BACKEND_HASH_MISMATCH = errors.New("hash of remote file differs from local file")
 )
-
 
 func Upload(name string, uuid string, parent string, reader io.Reader, opt_wantedMD5 string) (*drive.File, error) {
 	parents := make([]string, 1)
