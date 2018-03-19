@@ -18,23 +18,56 @@ import (
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/drive/v3"
 	"io"
+	"crypto/md5"
+	"time"
 )
 
 var (
 	E_NOPARENT = errors.New("no parent found")
+	E_BACKEND_HASH_MISMATCH = errors.New("hash of remote file differs from local file")
 )
 
-func Upload(name string, uuid string, parent string, reader io.Reader) (*drive.File, error) {
+
+func Upload(name string, uuid string, parent string, reader io.Reader, opt_wantedMD5 string) (*drive.File, error) {
 	parents := make([]string, 1)
 	parents[0] = parent
 	properties := make(map[string]string)
 	properties["OZB_uuid"] = uuid
 	properties["OZB"] = "true"
-	return srv.Files.Create(&drive.File{Name: name, Parents: parents, AppProperties: properties}).Media(reader).Do()
+	file, err := srv.Files.Create(&drive.File{Name: name, Parents: parents, AppProperties: properties}).Media(reader).Do()
+	if err != nil {
+		return nil, err
+	}
+
+	// If we pass an empty hash, skip verification
+	if opt_wantedMD5 == "" {
+		return file, nil
+	}
+
+	googleDriveMD5 := ""
+
+	for googleDriveMD5 == "" {
+		// Re-fetch file, to have hashes and stuff
+		fileUpdate, err := srv.Files.Get(file.Id).Fields("md5Checksum, id").Do()
+		if err != nil {
+			return nil, err
+		}
+
+		googleDriveMD5 = fileUpdate.Md5Checksum
+
+		if googleDriveMD5 == "" {
+			time.Sleep(5 * time.Second)
+		}
+	}
+
+	if googleDriveMD5 != opt_wantedMD5 {
+		return nil, E_BACKEND_HASH_MISMATCH
+	}
+
+	return file, err
 }
 
-func Download(fileId string, md5 string, writer *os.File) (int64, error) {
-	//TODO: check MD5!
+func Download(fileId string, opt_wantedMD5 string, writer *os.File) (int64, error) {
 	_, err := writer.Seek(0, 0)
 	if err != nil {
 		return 0, err
@@ -53,9 +86,19 @@ func Download(fileId string, md5 string, writer *os.File) (int64, error) {
 	}
 	defer res.Body.Close()
 
-	n, err := io.Copy(writer, res.Body)
+	hash := md5.New()
+	multiWriter := io.MultiWriter(writer, hash)
+
+	n, err := io.Copy(multiWriter, res.Body)
 	if err != nil {
 		return 0, err
+	}
+
+	writtenMD5 := fmt.Sprintf("%x", hash.Sum(nil))
+
+	// Empty opt_wantedMD5 = disable verification
+	if opt_wantedMD5 != "" && writtenMD5 != opt_wantedMD5 {
+		return 0, E_BACKEND_HASH_MISMATCH
 	}
 
 	err = writer.Sync()

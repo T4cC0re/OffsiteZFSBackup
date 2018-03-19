@@ -8,6 +8,8 @@ import (
 	"io/ioutil"
 	"os"
 	"time"
+	"crypto/md5"
+	"hash"
 )
 
 const WRITE_CACHE_FILENAME = "OZBWriteCache"
@@ -29,6 +31,8 @@ type Writer struct {
 	parentID     string
 	closed       bool
 	uuid         string
+	hash 		 hash.Hash
+
 }
 
 func NewGoogleDriveWriter(fileName string, uuid string, parentID string, cacheSize int) (*Writer, error) {
@@ -47,7 +51,7 @@ func NewGoogleDriveWriter(fileName string, uuid string, parentID string, cacheSi
 		return nil, err
 	}
 
-	writer := &Writer{cache: cache, written: 0, chunk: 0, fileNameBase: fileName, parentID: parentID, cacheSize: cacheSize, closed: false, uuid: uuid}
+	writer := &Writer{cache: cache, written: 0, chunk: 0, fileNameBase: fileName, parentID: parentID, cacheSize: cacheSize, closed: false, uuid: uuid, hash: md5.New()}
 	return writer, nil
 }
 
@@ -57,6 +61,8 @@ func (this *Writer) upload() error {
 		return err
 	}
 
+	fileHash := fmt.Sprintf("%x", this.hash.Sum(nil))
+
 	fmt.Fprintf(os.Stderr, "\033[2KUploading chunk %d for a total of %s...\r", this.chunk, humanize.IBytes(uint64(this.Total)+uint64(this.written)))
 	for {
 		_, err = this.cache.Seek(0, 0)
@@ -64,14 +70,12 @@ func (this *Writer) upload() error {
 			return err
 		}
 
-		driveFile, err := Upload(fmt.Sprintf("%s|%d", this.fileNameBase, this.chunk), this.uuid, this.parentID, this.cache)
+		driveFile, err := Upload(fmt.Sprintf("%s|%d", this.fileNameBase, this.chunk), this.uuid, this.parentID, this.cache, fileHash)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "\033[2KUpload of chunk %d failed for a total of %s Retrying...\r", this.chunk, humanize.IBytes(uint64(this.Total)+uint64(this.written)))
 			time.Sleep(time.Microsecond * 250)
 			continue
 		}
-
-		fmt.Println(driveFile)
 
 		this.Total += int64(this.written)
 		this.written = 0
@@ -88,6 +92,9 @@ func (this *Writer) upload() error {
 	if err != nil {
 		return err
 	}
+
+	this.hash = md5.New()
+
 	return nil
 }
 
@@ -96,6 +103,8 @@ func (this *Writer) writeSync(p []byte) (int64, error) {
 	if err != nil {
 		return int64(this.written), err
 	}
+
+	this.hash.Write(p)
 
 	err = this.cache.Sync()
 	if err != nil {

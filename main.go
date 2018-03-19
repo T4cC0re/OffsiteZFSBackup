@@ -32,6 +32,7 @@ var (
 	folder         = flag.String("folder", "OZB", "Folder on Google Drive to backup to/from")
 	passphrase     = flag.String("passphrase", "", "Passphrase to use to en-/decrypt and for authentication")
 	quota          = flag.Bool("quota", false, "Define to see Google Drive quota used before continuing")
+	chunksize      = flag.Int("chunksize", 256, "Chunksize for files in MiB. Note: You need this space on disk during up- & download!")
 )
 
 func main() {

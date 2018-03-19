@@ -3,7 +3,6 @@ package GoogleDrive
 import (
 	"errors"
 	"fmt"
-	"github.com/dustin/go-humanize"
 	"golang.org/x/net/context"
 	"google.golang.org/api/drive/v3"
 	"io"
@@ -12,6 +11,7 @@ import (
 	"regexp"
 	"strconv"
 	"time"
+	"github.com/dustin/go-humanize"
 )
 
 const READ_CACHE_FILENAME = "OZBReadCache"
@@ -74,6 +74,8 @@ func NewGoogleDriveReader(uuid string, parentID string) (*Reader, error) {
 		return nil, err
 	}
 
+	fmt.Fprintln(os.Stderr, cache.Name())
+
 	_, err = cache.Seek(0, 0)
 	if err != nil {
 		return nil, err
@@ -128,19 +130,17 @@ func (this *Reader) gatherChunkInfo(fileList *drive.FileList) error {
 }
 
 func (this *Reader) download(chunk uint) error {
-	fmt.Fprintf(os.Stderr, "\033[2KDownloading chunk %d for a total of %s...\r", this.chunk, humanize.IBytes(uint64(this.Total)+uint64(this.chunkPos)))
+	fmt.Fprintf(os.Stderr, "\033[2KDownloading chunk %d...\r", chunk)
 	for {
 		size, err := Download(this.fileIDs[chunk], this.fileMD5s[chunk], this.cache)
-		fmt.Println(size, this.chunkSize[chunk], err)
-			fmt.Fprintf(os.Stderr, "\033[2KDownload of chunk %d failed for a total of %s Retrying...\r", this.chunk, humanize.IBytes(uint64(this.Total + size)))
-		if err != nil || size != this.chunkSize[chunk] {
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "\033[2KDownload of chunk %d failed. %s Retrying...\r", chunk, err.Error())
 			time.Sleep(time.Microsecond * 250)
 			continue
 		}
 
-		this.Total += int64(size)
 		this.chunkPos = 0
-		fmt.Fprintf(os.Stderr, "\033[2KDownloaded chunk %d for a total of %s.\n", this.chunk, humanize.IBytes(uint64(this.Total)))
+		fmt.Fprintf(os.Stderr, "\033[2KDownloaded chunk %d (%s)\n", chunk, humanize.IBytes(uint64(size)))
 		break
 	}
 
@@ -191,6 +191,7 @@ func (this *Reader) Read(p []byte) (int, error) {
 		if lastChunk {
 			copy(p, read1)
 			this.hitEOF = true
+			this.Total += int64(len(read1))
 			return len(read1), nil
 		}
 
@@ -211,6 +212,7 @@ func (this *Reader) Read(p []byte) (int, error) {
 
 		wholeRead := append(read1, read2...)
 		copy(p, wholeRead)
+		this.Total += availableToRead + restToRead
 		return int(availableToRead + restToRead), nil
 	} else {
 		buff := make([]byte, len(p))
@@ -222,6 +224,7 @@ func (this *Reader) Read(p []byte) (int, error) {
 
 		copy(p, buff)
 
+		this.Total += int64(len(p))
 		return len(p), nil
 	}
 }
@@ -240,6 +243,8 @@ func (this *Reader) Close() error {
 	if err != nil {
 		return err
 	}
+
+	fmt.Fprintf(os.Stderr, "Finished stream after %s\n", humanize.IBytes(uint64(this.Total)))
 
 	return nil
 }
