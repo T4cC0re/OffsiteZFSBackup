@@ -190,12 +190,35 @@ func findId(wanted string, parentID string) (string, error) {
 	return "", E_NOPARENT
 }
 
-func findInFolder(parentID string) (*drive.FileList, error) {
-	return srv.Files.
+type folderSearch struct {
+	files []*drive.File
+	callback func(*drive.File)
+}
+
+func (this *folderSearch) add(list *drive.FileList) error {
+	for _, file := range list.Files {
+		this.callback(file)
+	}
+	return nil
+}
+
+func (this *folderSearch) Files() []*drive.File {
+	return this.files
+}
+
+func findInFolder(parentID string, callback func(*drive.File)) (*folderSearch, error) {
+	search := folderSearch{callback:callback}
+
+	err := srv.Files.
 		List().
 		Fields("nextPageToken, files").
-		Q("'" + parentID + "' in parents AND trashed = false AND properties has { key='OZB' and value='true'}").
-		Do()
+		Q("'" + parentID + "' in parents AND trashed = false").// AND properties has { key='OZB' and value='true'}").
+		Pages(context.Background(), search.add)
+	if err != nil {
+		return  nil, err
+	}
+
+	return &search, nil
 }
 
 // getClient uses a Context and Config to retrieve a Token
@@ -322,14 +345,12 @@ func createFolder(name string) (string, error) {
 }
 
 func ListFiles(parent string) {
-	files, err := findInFolder(parent)
-	if err != nil {
-		panic(err)
-	}
-
-	for _, file := range files.Files {
+	files, err := findInFolder(parent, func(file *drive.File) {
 		fmt.Fprintf(os.Stderr, "ITEM: %s\tMD5: %s\tSize: %d (%s)\tID: %s\n", file.Name, file.Md5Checksum, file.Size, humanize.IBytes(uint64(file.Size)), file.Id)
 		fmt.Fprintf(os.Stderr, file.Properties["OZB_uuid"])
+	})
+	if err != nil || files == nil {
+		panic(err)
 	}
 }
 
