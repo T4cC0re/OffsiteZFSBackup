@@ -40,8 +40,6 @@ func NewGoogleDriveReader(meta *Metadata) (*Reader, error) {
 		return nil, err
 	}
 
-	fmt.Fprintln(os.Stderr, cache.Name())
-
 	_, err = cache.Seek(0, 0)
 	if err != nil {
 		return nil, err
@@ -99,7 +97,6 @@ func (this *Reader) gatherChunkInfo(fileList *drive.FileList) error {
 }
 
 func (this *Reader) download(chunk uint) error {
-	fmt.Fprintf(os.Stderr, "\n")
 	for {
 		fmt.Fprintf(os.Stderr, "\033[2KDownloading chunk %d...\r", chunk)
 		size, err := Download(this.fileIDs[chunk], this.fileMD5s[chunk], this.cache)

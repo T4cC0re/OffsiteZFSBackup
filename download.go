@@ -35,13 +35,22 @@ func downloadCommand() {
 		read = cipher.StreamReader{S: *keyStream, R: downloader}
 	}
 	if mac != nil {
+		writers = append(writers, *mac)
 	}
 
-	// TODO: HMAC Verification
+	writers = append(writers, os.Stdout)
+	multiWriter := io.MultiWriter(writers...)
 
 	zr := lz4.NewReader(nil)
 	zr.Reset(read)
-	if _, err := io.Copy(os.Stdout, zr); err != nil {
+	if _, err := io.Copy(multiWriter, zr); err != nil {
 		fmt.Fprintf(os.Stderr, "Error while decompressing input: %v", err)
+	}
+
+	hmac := fmt.Sprintf("%x", (*mac).Sum(nil))
+
+	if metadata.HMAC != hmac {
+		fmt.Fprintf(os.Stderr, "Crap. HMAC does not match... :(\nWanted:\t%s\nGot:\t%s\n", metadata.HMAC, hmac)
+		os.Exit(1)
 	}
 }

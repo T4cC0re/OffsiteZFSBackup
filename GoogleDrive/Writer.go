@@ -122,7 +122,7 @@ func (this *Writer) writeSync(p []byte) (int64, error) {
 	return curloc, nil
 }
 
-func (this *Writer) Write(buff []byte) (int, error) {
+func (this *Writer) Write(p []byte) (int, error) {
 	if this.closed {
 		return 0, E_WRITER_CLOSED
 	}
@@ -130,6 +130,9 @@ func (this *Writer) Write(buff []byte) (int, error) {
 	if this.written == 0 {
 		fmt.Fprintf(os.Stderr, "\033[2KWriting into chunk %d...\r", this.Chunk)
 	}
+
+	buff := make([]byte, len(p))
+	copy(buff, p)
 
 	for (len(buff) + this.written) > this.cacheSize {
 		toWrite := this.cacheSize - this.written
@@ -158,7 +161,7 @@ func (this *Writer) Write(buff []byte) (int, error) {
 		err = this.upload()
 	}
 
-	return len(buff), nil
+	return len(p), nil
 }
 
 func (this *Writer) Close() error {
@@ -171,10 +174,7 @@ func (this *Writer) Close() error {
 		return err
 	}
 
-	err = this.cache.Close()
-	if err != nil {
-		return err
-	}
+	_ = this.cache.Close()
 
 	err = os.Remove(this.cache.Name())
 	if err != nil {

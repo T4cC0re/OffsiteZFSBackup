@@ -7,10 +7,10 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"errors"
+	"fmt"
 	"golang.org/x/crypto/sha3"
 	"hash"
 	"io"
-	"fmt"
 	"os"
 )
 
@@ -24,6 +24,17 @@ var writers []io.Writer
 
 func prepareMACAndEncryption(passphrase string, iv []byte, authentication string, encryption string, decrypt bool) (*hash.Hash, *cipher.Stream) {
 	passwordHash := sha3.Sum256([]byte(passphrase))
+
+	// fmt.Fprintf(
+	// 	os.Stderr,
+	// 	"DEBUG:\n\t- passphrase: %s\n\t- password Hash: %s\n\t- IV: %s\n\t- auth: %s\n\t-  encryption: %s\n\t- decrypt: %v",
+	// 	passphrase,
+	// 	passwordHash,
+	// 	iv,
+	// 	authentication,
+	// 	encryption,
+	// 	decrypt,
+	// )
 
 	var block cipher.Block
 	var err error
