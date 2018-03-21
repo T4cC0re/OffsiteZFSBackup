@@ -8,27 +8,13 @@ import (
 	"runtime"
 )
 
-type StorageSettings struct {
-	Encryption     string
-	Authentication string
-}
-
-func generateFileBaseName(filename string, uuid string, settings StorageSettings, isData bool) string {
-	fileType := "D"
-	if !isData {
-		fileType = "M"
-	}
-
-	return fmt.Sprintf("%s|%s|%s|%s|%s", uuid, filename, settings.Encryption, settings.Authentication, fileType)
-}
-
 var (
 	upload         = flag.Bool("upload", false, "Define to upload from stdin")
 	filename       = flag.String("filename", "", "Filename to upload/download")
 	list           = flag.Bool("list", false, "List files available")
 	download       = flag.Bool("download", false, "Define to download to stdout")
 	authentication = flag.String("authentication", "HMAC-SHA3-512", "Define the authentication to use (NONE, HMAC-SHA[3-]{256,512})")
-	encryption     = flag.String("encryption", "NONE", "Define the encryption to use")
+	encryption     = flag.String("encryption", "AES-CTR", "Define the encryption to use (NONE, AES-{CTR,OFB,CFB})")
 	folder         = flag.String("folder", "OZB", "Folder on Google Drive to backup to/from")
 	passphrase     = flag.String("passphrase", "", "Passphrase to use to en-/decrypt and for authentication")
 	quota          = flag.Bool("quota", false, "Define to see Google Drive quota used before continuing")

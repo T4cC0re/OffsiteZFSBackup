@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -26,7 +27,6 @@ type Reader struct {
 	Total     int64
 	chunk     uint
 	uuid      string
-	parentID  string
 	closed    bool
 	fileIDs   map[uint]string
 	fileMD5s  map[uint]string
@@ -34,7 +34,7 @@ type Reader struct {
 	hitEOF    bool
 }
 
-func NewGoogleDriveReader(uuid string, parentID string) (*Reader, error) {
+func NewGoogleDriveReader(meta *Metadata) (*Reader, error) {
 	cache, err := ioutil.TempFile("", READ_CACHE_FILENAME)
 	if err != nil {
 		return nil, err
@@ -51,13 +51,13 @@ func NewGoogleDriveReader(uuid string, parentID string) (*Reader, error) {
 	if err != nil {
 		return nil, err
 	}
-	reader := &Reader{cache: cache, chunkPos: 0, chunk: 0, uuid: uuid, parentID: parentID, closed: false, chunkSize: make(map[uint]int64), fileIDs: make(map[uint]string), fileMD5s: make(map[uint]string), hitEOF: false}
+	reader := &Reader{cache: cache, chunkPos: 0, chunk: 0, uuid: meta.Uuid, closed: false, chunkSize: make(map[uint]int64), fileIDs: make(map[uint]string), fileMD5s: make(map[uint]string), hitEOF: false}
 
 	// TODO: Limit fields to fetch!
 	err = srv.Files.
 		List().
 		Fields("nextPageToken, files").
-		Q("properties has { key='OZB_uuid' and value='"+uuid+"' }").
+		Q("properties has { key='OZB_uuid' and value='"+meta.Uuid+"' } AND properties has { key='OZB_type' and value='data' }").
 		Pages(context.Background(), reader.gatherChunkInfo)
 
 	if err != nil {
@@ -71,42 +71,46 @@ func NewGoogleDriveReader(uuid string, parentID string) (*Reader, error) {
 			maxIndex = index
 		}
 	}
-	if len(reader.fileIDs) != int(maxIndex+1) {
+	if len(reader.fileIDs) != int(maxIndex+1) || uint(len(reader.fileIDs)) != meta.Chunks {
 		return nil, E_CHUNKS_MISSING
 	}
 
 	reader.download(0)
+	fmt.Fprintf(os.Stderr, "\033[2KReading from chunk %d...\r", 0)
 
 	return reader, nil
 }
 
 func (this *Reader) gatherChunkInfo(fileList *drive.FileList) error {
 	for _, file := range fileList.Files {
-		chunkInfo, err := ParseFileName(file.Name)
+		raw, err := strconv.ParseUint(file.Properties["OZB_chunk"], 10, 32)
 		if err != nil {
 			return err
 		}
 
-		this.fileIDs[chunkInfo.Chunk] = file.Id
-		this.fileMD5s[chunkInfo.Chunk] = file.Md5Checksum
-		this.chunkSize[chunkInfo.Chunk] = file.Size
+		chunkId := uint(raw)
+
+		this.fileIDs[chunkId] = file.Id
+		this.fileMD5s[chunkId] = file.Md5Checksum
+		this.chunkSize[chunkId] = file.Size
 	}
 
 	return nil
 }
 
 func (this *Reader) download(chunk uint) error {
-	fmt.Fprintf(os.Stderr, "\033[2KDownloading chunk %d...\r", chunk)
+	fmt.Fprintf(os.Stderr, "\n")
 	for {
+		fmt.Fprintf(os.Stderr, "\033[2KDownloading chunk %d...\r", chunk)
 		size, err := Download(this.fileIDs[chunk], this.fileMD5s[chunk], this.cache)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "\033[2KDownload of chunk %d failed. %s Retrying...\r", chunk, err.Error())
-			time.Sleep(time.Microsecond * 250)
+			time.Sleep(5 * time.Second)
 			continue
 		}
 
 		this.chunkPos = 0
-		fmt.Fprintf(os.Stderr, "\033[2KDownloaded chunk %d (%s)\n", chunk, humanize.IBytes(uint64(size)))
+		fmt.Fprintf(os.Stderr, "\033[2KDownloaded chunk %d (%s)\r", chunk, humanize.IBytes(uint64(size)))
 		break
 	}
 
@@ -166,6 +170,9 @@ func (this *Reader) Read(p []byte) (int, error) {
 			return 0, err
 		}
 		this.chunk++
+
+		fmt.Fprintf(os.Stderr, "\033[2KReading from chunk %d...\r", this.chunk)
+
 		if this.chunkSize[this.chunk] < restToRead {
 			restToRead = this.chunkSize[this.chunk]
 		}

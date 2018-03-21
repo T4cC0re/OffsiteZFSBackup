@@ -25,17 +25,17 @@ type Writer struct {
 	io.WriteCloser
 	cache        *os.File
 	written      int
-	Total        int64
+	Total        uint64
 	cacheSize    int
-	chunk        uint
+	Chunk        uint
 	fileNameBase string
 	parentID     string
 	closed       bool
-	uuid         string
+	meta         *MetadataBase
 	hash         hash.Hash
 }
 
-func NewGoogleDriveWriter(fileName string, uuid string, parentID string, cacheSize int) (*Writer, error) {
+func NewGoogleDriveWriter(meta *MetadataBase, parentID string, cacheSize int) (*Writer, error) {
 	cache, err := ioutil.TempFile("", WRITE_CACHE_FILENAME)
 	if err != nil {
 		return nil, err
@@ -51,7 +51,8 @@ func NewGoogleDriveWriter(fileName string, uuid string, parentID string, cacheSi
 		return nil, err
 	}
 
-	writer := &Writer{cache: cache, written: 0, chunk: 0, fileNameBase: fileName, parentID: parentID, cacheSize: cacheSize, closed: false, uuid: uuid, hash: md5.New()}
+	writer := &Writer{cache: cache, written: 0, Chunk: 0, parentID: parentID, cacheSize: cacheSize, closed: false, meta: meta, hash: md5.New()}
+
 	return writer, nil
 }
 
@@ -63,24 +64,25 @@ func (this *Writer) upload() error {
 
 	fileHash := fmt.Sprintf("%x", this.hash.Sum(nil))
 
-	fmt.Fprintf(os.Stderr, "\033[2KUploading chunk %d for a total of %s...\r", this.chunk, humanize.IBytes(uint64(this.Total)+uint64(this.written)))
+	chunkInfo := &ChunkInfo{Uuid: this.meta.Uuid, Encryption: this.meta.Encryption, Authentication: this.meta.Authentication, IsData: true, FileName: this.meta.FileName, Chunk: this.Chunk}
 	for {
+		fmt.Fprintf(os.Stderr, "\033[2KUploading chunk %d for a total of %s...\r", this.Chunk, humanize.IBytes(uint64(this.Total)+uint64(this.written)))
 		_, err = this.cache.Seek(0, 0)
 		if err != nil {
 			return err
 		}
 
-		driveFile, err := Upload(fmt.Sprintf("%s|%d", this.fileNameBase, this.chunk), this.uuid, this.parentID, this.cache, fileHash)
+		driveFile, err := Upload(chunkInfo, this.parentID, this.cache, fileHash)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "\033[2KUpload of chunk %d failed for a total of %s Retrying...\r", this.chunk, humanize.IBytes(uint64(this.Total)+uint64(this.written)))
-			time.Sleep(time.Microsecond * 250)
+			fmt.Fprintf(os.Stderr, "\033[2KUpload of chunk %d failed for a total of %s Retrying...\r", this.Chunk, humanize.IBytes(uint64(this.Total)+uint64(this.written)))
+			time.Sleep(5 * time.Second)
 			continue
 		}
 
-		this.Total += int64(this.written)
+		this.Total += uint64(this.written)
 		this.written = 0
-		fmt.Fprintf(os.Stderr, "\033[2KUploaded chunk %d for a total of %s. ID: %s\n", this.chunk, humanize.IBytes(uint64(this.Total)), driveFile.Id)
-		this.chunk++
+		fmt.Fprintf(os.Stderr, "\033[2KUploaded chunk %d for a total of %s. ID: %s\n", this.Chunk, humanize.IBytes(uint64(this.Total)), driveFile.Id)
+		this.Chunk++
 		break
 	}
 
@@ -120,13 +122,14 @@ func (this *Writer) writeSync(p []byte) (int64, error) {
 	return curloc, nil
 }
 
-func (this *Writer) Write(p []byte) (int, error) {
+func (this *Writer) Write(buff []byte) (int, error) {
 	if this.closed {
 		return 0, E_WRITER_CLOSED
 	}
 
-	buff := make([]byte, len(p))
-	copy(buff, p) // Do not alter what was passed
+	if this.written == 0 {
+		fmt.Fprintf(os.Stderr, "\033[2KWriting into chunk %d...\r", this.Chunk)
+	}
 
 	for (len(buff) + this.written) > this.cacheSize {
 		toWrite := this.cacheSize - this.written
@@ -155,7 +158,7 @@ func (this *Writer) Write(p []byte) (int, error) {
 		err = this.upload()
 	}
 
-	return len(p), nil
+	return len(buff), nil
 }
 
 func (this *Writer) Close() error {

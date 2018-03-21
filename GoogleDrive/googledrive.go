@@ -12,6 +12,7 @@ import (
 	"os/user"
 	"path/filepath"
 
+	"bytes"
 	"crypto/md5"
 	"github.com/dustin/go-humanize"
 	"golang.org/x/net/context"
@@ -44,15 +45,23 @@ type Metadata struct {
 	Authentication string
 	HMAC           string
 	IV             string
+	TotalSizeIn    uint64
+	TotalSize      uint64
+	Chunks         uint
 }
 
 type ChunkInfo struct {
-	MetadataBase
-	Chunk uint
+	Uuid           string
+	FileName       string
+	Encryption     string
+	Authentication string
+	IsData         bool
+	Chunk          uint
 }
 
 var chunkInfoRegexp = regexp.MustCompile(`(?mi)^([a-z0-9]{8}-[a-z0-9]{4}-4[a-z0-9]{3}-[89ab][a-z0-9]{3}-[a-z0-9]{12})\|([^|]+)\|([^|]+)\|([^|]+)\|(D|M)\|(\d+)$`)
 
+// DEPRECATED
 func ParseFileName(filename string) (*ChunkInfo, error) {
 	matches := chunkInfoRegexp.FindStringSubmatch(filename)
 	if matches == nil || len(matches) != 7 {
@@ -75,23 +84,74 @@ func ParseFileName(filename string) (*ChunkInfo, error) {
 	return &chunkInfo, nil
 }
 
-func UploadMetadata(meta *Metadata) *Metadata {
+func FetchMetadata(uuid string, parent string) (*Metadata, error) {
+	files, err := srv.Files.
+		List().
+		Fields("nextPageToken, files").
+		Q("'" + parent + "' in parents AND trashed = false AND properties has { key='OZB_type' and value='metadata' } AND properties has { key='OZB_uuid' and value='" + uuid + "' }").
+		Do()
+	if err != nil {
+		return nil, err
+	}
+
+	var res *http.Response
+	for _, file := range files.Files {
+		res, err = srv.Files.Get(file.Id).Download()
+		break
+	}
+	defer res.Body.Close()
+
+	marshalled, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	unmarshalled := &Metadata{}
+	json.Unmarshal(marshalled, unmarshalled)
+	if err != nil {
+		return nil, err
+	}
+
+	return unmarshalled, nil
+}
+
+func UploadMetadata(meta *Metadata, parent string) *Metadata {
 	metaBytes, err := json.Marshal(meta)
 	if err != nil {
 		return nil
 	}
-	fmt.Fprintln(os.Stderr, string(metaBytes))
+
+	reader := bytes.NewReader(metaBytes)
+
+	parents := make([]string, 1)
+	parents[0] = parent
+	properties := make(map[string]string)
+	properties["OZB"] = "true"
+	properties["OZB_uuid"] = meta.Uuid
+	properties["OZB_filename"] = meta.FileName
+	properties["OZB_encryption"] = meta.Encryption
+	properties["OZB_authentication"] = meta.Authentication
+	properties["OZB_chunk"] = fmt.Sprintf("%d", meta.Chunks)
+	properties["OZB_type"] = "metadata"
+	filename := fmt.Sprintf("%s|M", meta.Uuid)
+	_, err = srv.Files.Create(&drive.File{Name: filename, Parents: parents, Properties: properties}).Media(reader).Do()
+	if err != nil {
+		return nil
+	}
 
 	return meta
 }
 
-func Upload(name string, uuid string, parent string, reader io.Reader, opt_wantedMD5 string) (*drive.File, error) {
+func Upload(meta *ChunkInfo, parent string, reader io.Reader, opt_wantedMD5 string) (*drive.File, error) {
 	parents := make([]string, 1)
 	parents[0] = parent
 	properties := make(map[string]string)
-	properties["OZB_uuid"] = uuid
 	properties["OZB"] = "true"
-	file, err := srv.Files.Create(&drive.File{Name: name, Parents: parents, Properties: properties}).Media(reader).Do()
+	properties["OZB_uuid"] = meta.Uuid
+	properties["OZB_chunk"] = fmt.Sprintf("%d", meta.Chunk)
+	properties["OZB_type"] = "data"
+	filename := fmt.Sprintf("%s|%d", meta.Uuid, meta.Chunk)
+	file, err := srv.Files.Create(&drive.File{Name: filename, Parents: parents, Properties: properties}).Media(reader).Do()
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +251,7 @@ func findId(wanted string, parentID string) (string, error) {
 }
 
 type folderSearch struct {
-	files []*drive.File
+	files    []*drive.File
 	callback func(*drive.File)
 }
 
@@ -207,15 +267,15 @@ func (this *folderSearch) Files() []*drive.File {
 }
 
 func findInFolder(parentID string, callback func(*drive.File)) (*folderSearch, error) {
-	search := folderSearch{callback:callback}
+	search := folderSearch{callback: callback}
 
 	err := srv.Files.
 		List().
 		Fields("nextPageToken, files").
-		Q("'" + parentID + "' in parents AND trashed = false").// AND properties has { key='OZB' and value='true'}").
+		Q("'"+parentID+"' in parents AND trashed = false AND properties has { key='OZB_type' and value='metadata' }").
 		Pages(context.Background(), search.add)
 	if err != nil {
-		return  nil, err
+		return nil, err
 	}
 
 	return &search, nil
@@ -346,8 +406,17 @@ func createFolder(name string) (string, error) {
 
 func ListFiles(parent string) {
 	files, err := findInFolder(parent, func(file *drive.File) {
-		fmt.Fprintf(os.Stderr, "ITEM: %s\tMD5: %s\tSize: %d (%s)\tID: %s\n", file.Name, file.Md5Checksum, file.Size, humanize.IBytes(uint64(file.Size)), file.Id)
-		fmt.Fprintf(os.Stderr, file.Properties["OZB_uuid"])
+		// fmt.Fprintf(os.Stderr, "ITEM: %s\tMD5: %s\tSize: %d (%s)\tID: %s\n", file.Name, file.Md5Checksum, file.Size, humanize.IBytes(uint64(file.Size)), file.Id)
+
+		fmt.Fprintf(
+			os.Stderr,
+			"'%s'\n\t- UUID: %s\n\t- Enc.: %s\n\t- Auth: %s\n\t- Chunks: %s\n",
+			file.Properties["OZB_filename"],
+			file.Properties["OZB_uuid"],
+			file.Properties["OZB_encryption"],
+			file.Properties["OZB_authentication"],
+			file.Properties["OZB_chunk"],
+		)
 	})
 	if err != nil || files == nil {
 		panic(err)
