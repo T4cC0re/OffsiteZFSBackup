@@ -12,6 +12,7 @@ import (
 	"hash"
 	"io"
 	"os"
+	"strings"
 )
 
 func createHMAC(hash func() hash.Hash) hash.Hash {
@@ -39,6 +40,7 @@ func prepareMACAndEncryption(passphrase string, iv []byte, authentication string
 	var block cipher.Block
 	var err error
 	if encryption != "none" {
+		// Since passwordHash is a 256-bit/32-byte slice, this will set AES-256
 		block, err = aes.NewCipher(passwordHash[:])
 		if err != nil {
 			panic(err)
@@ -86,10 +88,10 @@ func prepareMACAndEncryption(passphrase string, iv []byte, authentication string
 	}
 
 	if keyStream != nil {
-		fmt.Fprintf(os.Stderr, "Encryption enabled: %s\n", encryption)
+		fmt.Fprintf(os.Stderr, "Encryption enabled .....: %s\n", strings.ToUpper(encryption))
 	}
 	if mac != nil {
-		fmt.Fprintf(os.Stderr, "Authentication enabled: %s\n", authentication)
+		fmt.Fprintf(os.Stderr, "Authentication enabled .: %s\n", strings.ToUpper(authentication))
 	}
 
 	return &mac, &keyStream
