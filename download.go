@@ -50,4 +50,23 @@ func downloadCommand() {
 		fmt.Fprintf(os.Stderr, "Crap. HMAC does not match... :(\nWanted:\t%s\nGot:\t%s\n", metadata.HMAC, hmac)
 		os.Exit(1)
 	}
+
+	//Print summary:
+	fmt.Fprintf(
+		os.Stderr,
+		"\nSummary:\n" +
+			" - Filename: '%s'\n" +
+			" - UUID: '%s'\n" +
+			" - Crypto: %s with %s\n" +
+			" - Bytes downloaded: %d (lz4 compressed)\n" +
+			" - Bytes written: %d\n" +
+			" - Chunks: %d\n",
+		metadata.FileName,
+		metadata.Uuid,
+		metadata.Encryption,
+		metadata.Authentication,
+		metadata.TotalSize,
+		metadata.TotalSizeIn, // Taken from metadata, because this has to mach or the HMAC wouldn't
+		metadata.Chunks,
+	)
 }

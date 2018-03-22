@@ -71,6 +71,10 @@ func uploadCommand() {
 		writers = append(writers, compress)
 
 		readProxy := &ReadProxy{os.Stdin, 0}
+
+		fmt.Fprintf(os.Stderr, "Uploading as '%s'", inputMeta.Uuid)
+
+		// Here the actual reading and upload begins
 		_, err = io.Copy(io.MultiWriter(writers...), readProxy)
 		if err != nil {
 			panic(err)
@@ -91,8 +95,6 @@ func uploadCommand() {
 			authHMAC = fmt.Sprintf("%x", (*mac).Sum(nil))
 		}
 
-		fmt.Fprintf(os.Stderr, "HMAC: %s", authHMAC)
-
 		meta := &GoogleDrive.Metadata{
 			HMAC:           authHMAC,
 			IV:             fmt.Sprintf("%x", iv),
@@ -104,6 +106,25 @@ func uploadCommand() {
 			TotalSize:      uploader.Total,
 			Chunks:         uploader.Chunk,
 		}
+
+		//Print summary:
+		fmt.Fprintf(
+			os.Stderr,
+			"\nSummary:\n" +
+				" - Filename: '%s'\n" +
+				" - UUID: '%s'\n" +
+				" - Crypto: %s with %s\n" +
+				" - Bytes read: %d\n" +
+				" - Bytes uploaded: %d (lz4 compressed)\n" +
+				" - Chunks: %d\n",
+				meta.FileName,
+				meta.Uuid,
+				meta.Encryption,
+				meta.Authentication,
+				meta.TotalSizeIn,
+				meta.TotalSize,
+				meta.Chunks,
+			)
 
 		for {
 			fmt.Fprint(os.Stderr, "\033[2KUploading metadata...\r")
