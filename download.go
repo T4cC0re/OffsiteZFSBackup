@@ -54,12 +54,12 @@ func downloadCommand() {
 	//Print summary:
 	fmt.Fprintf(
 		os.Stderr,
-		"\nSummary:\n" +
-			" - Filename: '%s'\n" +
-			" - UUID: '%s'\n" +
-			" - Crypto: %s with %s\n" +
-			" - Bytes downloaded: %d (lz4 compressed)\n" +
-			" - Bytes written: %d\n" +
+		"\nSummary:\n"+
+			" - Filename: '%s'\n"+
+			" - UUID: '%s'\n"+
+			" - Crypto: %s with %s\n"+
+			" - Bytes downloaded: %d (lz4 compressed)\n"+
+			" - Bytes written: %d\n"+
 			" - Chunks: %d\n",
 		metadata.FileName,
 		metadata.Uuid,

@@ -110,21 +110,21 @@ func uploadCommand() {
 		//Print summary:
 		fmt.Fprintf(
 			os.Stderr,
-			"\nSummary:\n" +
-				" - Filename: '%s'\n" +
-				" - UUID: '%s'\n" +
-				" - Crypto: %s with %s\n" +
-				" - Bytes read: %d\n" +
-				" - Bytes uploaded: %d (lz4 compressed)\n" +
+			"\nSummary:\n"+
+				" - Filename: '%s'\n"+
+				" - UUID: '%s'\n"+
+				" - Crypto: %s with %s\n"+
+				" - Bytes read: %d\n"+
+				" - Bytes uploaded: %d (lz4 compressed)\n"+
 				" - Chunks: %d\n",
-				meta.FileName,
-				meta.Uuid,
-				meta.Encryption,
-				meta.Authentication,
-				meta.TotalSizeIn,
-				meta.TotalSize,
-				meta.Chunks,
-			)
+			meta.FileName,
+			meta.Uuid,
+			meta.Encryption,
+			meta.Authentication,
+			meta.TotalSizeIn,
+			meta.TotalSize,
+			meta.Chunks,
+		)
 
 		for {
 			fmt.Fprint(os.Stderr, "\033[2KUploading metadata...\r")
