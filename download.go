@@ -14,7 +14,7 @@ func downloadCommand() {
 	parent := GoogleDrive.FindOrCreateFolder(*folder)
 
 	fmt.Fprintln(os.Stderr, "Fetching metadata...")
-	metadata, err := GoogleDrive.FetchMetadata(*filename, parent)
+	metadata, err := GoogleDrive.FetchMetadata(*download, parent)
 	if err != nil {
 		panic(err)
 	}

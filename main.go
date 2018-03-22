@@ -9,10 +9,9 @@ import (
 )
 
 var (
-	upload         = flag.Bool("upload", false, "Define to upload from stdin")
-	filename       = flag.String("filename", "", "Filename to upload/download")
+	upload         = flag.String("upload", "", "Filename to upload from stdin")
 	list           = flag.Bool("list", false, "List files available")
-	download       = flag.Bool("download", false, "Define to download to stdout")
+	download       = flag.String("download", "", "UUID to download to stdout")
 	authentication = flag.String("authentication", "HMAC-SHA3-512", "Define the authentication to use (NONE, HMAC-SHA[3-]{256,512})")
 	encryption     = flag.String("encryption", "AES-CTR", "Define the encryption to use (NONE, AES-{CTR,OFB,CFB})")
 	folder         = flag.String("folder", "OZB", "Folder on Google Drive to backup to/from")
@@ -35,17 +34,9 @@ func main() {
 		parent := GoogleDrive.FindOrCreateFolder(*folder)
 		GoogleDrive.ListFiles(parent)
 		os.Exit(0)
-	case *download:
-		if *filename == "" {
-			fmt.Fprintln(os.Stderr, "Please set a filename")
-			os.Exit(1)
-		}
+	case *download != "":
 		downloadCommand()
-	case *upload:
-		if *filename == "" {
-			fmt.Fprintln(os.Stderr, "Please set a filename")
-			os.Exit(1)
-		}
+	case *upload != "":
 		uploadCommand()
 	case *quota:
 		// NOOP

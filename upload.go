@@ -43,7 +43,7 @@ func uploadCommand() {
 		encryptionL := strings.ToLower(*encryption)
 		authenticationL := strings.ToLower(*authentication)
 
-		inputMeta := &GoogleDrive.MetadataBase{Uuid: id.String(), FileName: *filename, IsData: true, Authentication: authenticationL, Encryption: encryptionL}
+		inputMeta := &GoogleDrive.MetadataBase{Uuid: id.String(), FileName: *upload, IsData: true, Authentication: authenticationL, Encryption: encryptionL}
 
 		uploader, err := GoogleDrive.NewGoogleDriveWriter(inputMeta, parent, *chunksize*1024*1024)
 		if err != nil {
