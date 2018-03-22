@@ -34,9 +34,6 @@ func downloadCommand() {
 	if keyStream != nil {
 		read = cipher.StreamReader{S: *keyStream, R: downloader}
 	}
-	if mac != nil {
-		writers = append(writers, *mac)
-	}
 
 	writers = append(writers, os.Stdout)
 	multiWriter := io.MultiWriter(writers...)
