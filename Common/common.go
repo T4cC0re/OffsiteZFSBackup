@@ -1,4 +1,4 @@
-package main
+package Common
 
 import (
 	"crypto/aes"
@@ -10,20 +10,26 @@ import (
 	"fmt"
 	"golang.org/x/crypto/sha3"
 	"hash"
-	"io"
 	"os"
 	"strings"
 )
 
-func createHMAC(hash func() hash.Hash) hash.Hash {
-	mac := hmac.New(hash, []byte(*passphrase))
-	writers = append(writers, mac)
+func CreateHMAC(hash func() hash.Hash, passphrase string) hash.Hash {
+	mac := hmac.New(hash, []byte(passphrase))
 	return mac
 }
 
-var writers []io.Writer
+func panicIfNoPassphrase(decrypt bool, passphrase string) {
+	if passphrase == "" {
+		if decrypt {
+			panic(errors.New("must specify --passphrase for encrypted and/or authenticated backups"))
+		} else {
+			panic(errors.New("must specify --passphrase for encryption and/or authentication"))
+		}
+	}
+}
 
-func prepareMACAndEncryption(passphrase string, iv []byte, authentication string, encryption string, decrypt bool) (*hash.Hash, *cipher.Stream) {
+func PrepareMACAndEncryption(passphrase string, iv []byte, authentication string, encryption string, decrypt bool) (hash.Hash, cipher.Stream) {
 	passwordHash := sha3.Sum256([]byte(passphrase))
 
 	fmt.Fprintf(
@@ -49,18 +55,19 @@ func prepareMACAndEncryption(passphrase string, iv []byte, authentication string
 	var mac hash.Hash
 	switch authentication {
 	case "none":
+		mac = nil
 	case "hmac-sha512":
-		panicIfNoPassphrase(decrypt)
-		mac = createHMAC(sha512.New)
+		panicIfNoPassphrase(decrypt, passphrase)
+		mac = CreateHMAC(sha512.New, passphrase)
 	case "hmac-sha256":
-		panicIfNoPassphrase(decrypt)
-		mac = createHMAC(sha256.New)
+		panicIfNoPassphrase(decrypt, passphrase)
+		mac = CreateHMAC(sha256.New, passphrase)
 	case "hmac-sha3-512":
-		panicIfNoPassphrase(decrypt)
-		mac = createHMAC(sha3.New512)
+		panicIfNoPassphrase(decrypt, passphrase)
+		mac = CreateHMAC(sha3.New512, passphrase)
 	case "hmac-sha3-256":
-		panicIfNoPassphrase(decrypt)
-		mac = createHMAC(sha3.New256)
+		panicIfNoPassphrase(decrypt, passphrase)
+		mac = CreateHMAC(sha3.New256, passphrase)
 	default:
 		panic(errors.New("unsupported authentication method"))
 	}
@@ -70,17 +77,17 @@ func prepareMACAndEncryption(passphrase string, iv []byte, authentication string
 	case "none":
 		keyStream = nil
 	case "aes-ofb":
-		panicIfNoPassphrase(decrypt)
+		panicIfNoPassphrase(decrypt, passphrase)
 		keyStream = cipher.NewOFB(block, iv)
 	case "aes-cfb":
-		panicIfNoPassphrase(decrypt)
+		panicIfNoPassphrase(decrypt, passphrase)
 		if decrypt {
 			keyStream = cipher.NewCFBDecrypter(block, iv)
 		} else {
 			keyStream = cipher.NewCFBEncrypter(block, iv)
 		}
 	case "aes-ctr":
-		panicIfNoPassphrase(decrypt)
+		panicIfNoPassphrase(decrypt, passphrase)
 		keyStream = cipher.NewCTR(block, iv)
 	default:
 		panic(errors.New("unsupported encryption method"))
@@ -93,5 +100,5 @@ func prepareMACAndEncryption(passphrase string, iv []byte, authentication string
 		fmt.Fprintf(os.Stderr, "Authentication enabled .: %s\n", strings.ToUpper(authentication))
 	}
 
-	return &mac, &keyStream
+	return mac, keyStream
 }

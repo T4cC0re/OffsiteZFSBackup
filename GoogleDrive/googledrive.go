@@ -22,6 +22,7 @@ import (
 	"io"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -48,6 +49,8 @@ type Metadata struct {
 	TotalSizeIn    uint64
 	TotalSize      uint64
 	Chunks         uint
+	FileType       string
+	Date           int64
 }
 
 type ChunkInfo struct {
@@ -132,6 +135,9 @@ func UploadMetadata(meta *Metadata, parent string) *Metadata {
 	properties["OZB_encryption"] = meta.Encryption
 	properties["OZB_authentication"] = meta.Authentication
 	properties["OZB_chunk"] = fmt.Sprintf("%d", meta.Chunks)
+	properties["OZB_storesize"] = fmt.Sprintf("%d", meta.TotalSize)
+	properties["OZB_filetype"] = meta.FileType
+	properties["OZB_date"] = fmt.Sprintf("%d", meta.Date)
 	properties["OZB_type"] = "metadata"
 	filename := fmt.Sprintf("%s|M", meta.Uuid)
 	_, err = srv.Files.Create(&drive.File{Name: filename, Parents: parents, Properties: properties}).Media(reader).Do()
@@ -266,13 +272,19 @@ func (this *folderSearch) Files() []*drive.File {
 	return this.files
 }
 
-func findInFolder(parentID string, callback func(*drive.File)) (*folderSearch, error) {
+func findInFolder(parentID string, fileType string, callback func(*drive.File)) (*folderSearch, error) {
 	search := folderSearch{callback: callback}
+
+	query := "'" + parentID + "' in parents AND trashed = false AND properties has { key='OZB_type' and value='metadata' }"
+
+	if fileType != "" {
+		query += "AND properties has { key='OZB_filetype' and value='" + fileType + "' }"
+	}
 
 	err := srv.Files.
 		List().
 		Fields("nextPageToken, files").
-		Q("'"+parentID+"' in parents AND trashed = false AND properties has { key='OZB_type' and value='metadata' }").
+		Q(query).
 		Pages(context.Background(), search.add)
 	if err != nil {
 		return nil, err
@@ -405,17 +417,22 @@ func createFolder(name string) (string, error) {
 }
 
 func ListFiles(parent string) {
-	files, err := findInFolder(parent, func(file *drive.File) {
-		// fmt.Fprintf(os.Stderr, "ITEM: %s\tMD5: %s\tSize: %d (%s)\tID: %s\n", file.Name, file.Md5Checksum, file.Size, humanize.IBytes(uint64(file.Size)), file.Id)
+	files, err := findInFolder(parent, "file", func(file *drive.File) {
+		fmt.Fprintln(os.Stderr, file.Properties["OZB_date"])
+
+		size, _ := strconv.ParseUint(file.Properties["OZB_storesize"], 10, 64)
+		timestamp, _ := strconv.ParseInt(file.Properties["OZB_date"], 10, 64)
 
 		fmt.Fprintf(
 			os.Stderr,
-			"'%s'\n\t- UUID: %s\n\t- Enc.: %s\n\t- Auth: %s\n\t- Chunks: %s\n",
+			"'%s'\n\t- Date: %s\n\t- UUID: %s\n\t- Enc.: %s\n\t- Auth: %s\n\t- Size: %s chunks, %s\n",
 			file.Properties["OZB_filename"],
+			time.Unix(timestamp, 0).UTC().String(),
 			file.Properties["OZB_uuid"],
-			file.Properties["OZB_encryption"],
-			file.Properties["OZB_authentication"],
+			strings.ToUpper(file.Properties["OZB_encryption"]),
+			strings.ToUpper(file.Properties["OZB_authentication"]),
 			file.Properties["OZB_chunk"],
+			humanize.IBytes(size),
 		)
 	})
 	if err != nil || files == nil {
@@ -435,6 +452,7 @@ func FindOrCreateFolder(name string) string {
 	}
 	return parent
 }
+
 func DisplayQuota() {
 	q, err := getQuota()
 	if err != nil {
