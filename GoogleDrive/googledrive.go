@@ -208,7 +208,7 @@ func SaveLatest(snapshotname string, snapshotUUID string, subvolume string, fold
 	parent := FindOrCreateFolder(folder)
 
 	file, err := FindLatest(parent, subvolume)
-	if file.Id == "" {
+	if file == nil {
 		var parents []string
 		parents = append(parents, parent)
 		file, err = srv.
