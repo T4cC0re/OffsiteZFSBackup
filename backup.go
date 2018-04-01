@@ -32,8 +32,6 @@ func backupCommand() {
 
 	latestUploaded, err := GoogleDrive.FindLatest(GoogleDrive.FindOrCreateFolder(*folder), *subvolume)
 
-	fmt.Fprintln(os.Stderr, latestUploaded.Properties)
-
 	manager.ListLocalSnapshots()
 	snap := manager.CreateSnapshot(*subvolume)
 
