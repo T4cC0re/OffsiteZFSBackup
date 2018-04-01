@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"runtime"
-	"strings"
 )
 
 var (
@@ -21,13 +20,18 @@ var (
 	chunksize      = flag.Int("chunksize", 256, "Chunksize for files in MiB. Note: You need this space on disk during up- & download!")
 	backup         = flag.String("backup", "", "Specify 'btrfs' or 'zfs' to backup a snapshot")
 	restore        = flag.String("restore", "", "Specify 'btrfs' or 'zfs' to restore a snapshot")
-	subvolume      = flag.String("subvolume", "", "Subvolume to backup/restore to (btrfs/zfs only)")
+	subvolume = flag.String("subvolume", "", "Subvolume to backup/restore to (btrfs/zfs only)")
+	latest    = flag.Bool("latest", false, "Grab latest successfully uploaded snapshot for --subvolume")
 )
 
 func main() {
 	flag.Parse()
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	GoogleDrive.InitGoogleDrive()
+
+	//for _, pair := range os.Environ() {
+	//	fmt.Println(pair)
+	//}
 
 	if *quota {
 		GoogleDrive.DisplayQuota()
@@ -39,35 +43,22 @@ func main() {
 		GoogleDrive.ListFiles(parent)
 		os.Exit(0)
 	case *backup != "":
-		backupType := strings.ToLower(*backup)
-		if *subvolume == "" {
-			fmt.Fprintln(os.Stderr, "Must specify --subvolume")
-			os.Exit(1)
-		}
-		switch backupType {
-		case "btrfs":
-		case "zfs":
-		default:
-			fmt.Fprintln(os.Stderr, "--backup only supports btrfs and zfs.")
-			os.Exit(1)
-		}
+		backupCommand()
 	case *restore != "":
-		restoreType := strings.ToLower(*restore)
-		if *subvolume == "" {
-			fmt.Fprintln(os.Stderr, "Must specify --subvolume")
-			os.Exit(1)
-		}
-		switch restoreType {
-		case "btrfs":
-		case "zfs":
-		default:
-			fmt.Fprintln(os.Stderr, "--backup only supports btrfs and zfs.")
-			os.Exit(1)
-		}
+		restoreCommand()
 	case *download != "":
 		downloadCommand()
 	case *upload != "":
 		uploadCommand()
+	case *latest:
+		if *subvolume == "" {
+			fmt.Fprintln(os.Stderr, "Must specify --subvolume")
+			os.Exit(1)
+		}
+		parent := GoogleDrive.FindOrCreateFolder(*folder)
+		snapshot, err := GoogleDrive.FetchLatest(parent, *subvolume)
+		fmt.Println(snapshot)
+		fmt.Fprintln(os.Stderr, err)
 	case *quota:
 		// NOOP
 	default:

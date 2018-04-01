@@ -10,9 +10,17 @@ import (
 	"fmt"
 	"golang.org/x/crypto/sha3"
 	"hash"
+	"io"
 	"os"
 	"strings"
 )
+
+type SnapshotManager interface {
+	CreateSnapshot(subvolume string) string
+	IsAvailableLocally(snapshot string) bool
+	ListLocalSnapshots() []string
+	Stream(snapshot string, parentSnapshot string) (io.ReadCloser, error)
+}
 
 func CreateHMAC(hash func() hash.Hash, passphrase string) hash.Hash {
 	mac := hmac.New(hash, []byte(passphrase))
@@ -27,6 +35,14 @@ func panicIfNoPassphrase(decrypt bool, passphrase string) {
 			panic(errors.New("must specify --passphrase for encryption and/or authentication"))
 		}
 	}
+}
+
+func PrintAndExitOnError(err error, code int) {
+	if err == nil {
+		return
+	}
+	fmt.Fprintln(os.Stderr, err)
+	os.Exit(code)
 }
 
 func PrepareMACAndEncryption(passphrase string, iv []byte, authentication string, encryption string, decrypt bool) (hash.Hash, cipher.Stream) {

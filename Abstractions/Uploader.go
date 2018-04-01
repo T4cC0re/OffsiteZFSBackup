@@ -29,12 +29,15 @@ type Uploader struct {
 	iv          []byte
 	parent      string
 	fileType    string
+	subvolume   string
+	Parent string
 }
 
-func NewUploader(r io.ReadCloser, fileType string, folder string, filename string, passphrase string, encryption string, authentication string, chunksize int) *Uploader {
+func NewUploader(r io.ReadCloser, fileType string, subvolume string, folder string, filename string, passphrase string, encryption string, authentication string, chunksize int) *Uploader {
 	this := &Uploader{}
 
 	this.fileType = fileType
+	this.subvolume = subvolume
 
 	this.timestamp = time.Now().Unix()
 
@@ -129,7 +132,9 @@ func (this *Uploader) Upload() (*GoogleDrive.Metadata, error) {
 		TotalSize:      this.uploader.Total,
 		Chunks:         this.uploader.Chunk,
 		FileType:       this.fileType,
+		Subvolume:      this.subvolume,
 		Date:           this.timestamp,
+		Parent:			this.Parent,
 	}
 
 	//Print summary:

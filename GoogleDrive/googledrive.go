@@ -12,6 +12,7 @@ import (
 	"os/user"
 	"path/filepath"
 
+	"../Common"
 	"bytes"
 	"crypto/md5"
 	"github.com/dustin/go-humanize"
@@ -28,6 +29,7 @@ import (
 
 var (
 	E_NOPARENT              = errors.New("no parent found")
+	E_NO_LATEST             = errors.New("no latest found")
 	E_BACKEND_HASH_MISMATCH = errors.New("hash of remote file differs from local file")
 )
 
@@ -50,7 +52,9 @@ type Metadata struct {
 	TotalSize      uint64
 	Chunks         uint
 	FileType       string
+	Subvolume      string
 	Date           int64
+	Parent         string
 }
 
 type ChunkInfo struct {
@@ -118,6 +122,41 @@ func FetchMetadata(uuid string, parent string) (*Metadata, error) {
 	return unmarshalled, nil
 }
 
+func FindLatest(parent string, subvolume string) (*drive.File, error) {
+	files, err := srv.Files.
+		List().
+		Fields("nextPageToken, files").
+		Q("'" + parent + "' in parents AND trashed = false AND properties has { key='OZB_type' and value='latest' } AND properties has { key='OZB_subvolume' and value='" + subvolume + "' }").
+		Do()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, file := range files.Files {
+		return file, nil
+	}
+
+	return nil, nil
+}
+
+func FetchLatest(parent string, subvolume string) (string, error) {
+	file, err := FindLatest(parent, subvolume)
+
+	if file.Id == "" {
+		return "", E_NO_LATEST
+	}
+
+	res, err := srv.Files.Get(file.Id).Download()
+	defer res.Body.Close()
+
+	latest, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return "", E_NO_LATEST
+	}
+
+	return string(latest), nil
+}
+
 func UploadMetadata(meta *Metadata, parent string) *Metadata {
 	metaBytes, err := json.Marshal(meta)
 	if err != nil {
@@ -137,6 +176,8 @@ func UploadMetadata(meta *Metadata, parent string) *Metadata {
 	properties["OZB_chunk"] = fmt.Sprintf("%d", meta.Chunks)
 	properties["OZB_storesize"] = fmt.Sprintf("%d", meta.TotalSize)
 	properties["OZB_filetype"] = meta.FileType
+	properties["OZB_subvolume"] = meta.Subvolume
+	properties["OZB_parent"] = meta.Parent
 	properties["OZB_date"] = fmt.Sprintf("%d", meta.Date)
 	properties["OZB_type"] = "metadata"
 	filename := fmt.Sprintf("%s|M", meta.Uuid)
@@ -146,6 +187,47 @@ func UploadMetadata(meta *Metadata, parent string) *Metadata {
 	}
 
 	return meta
+}
+func SaveLatest(snapshotname string, snapshotUUID string, subvolume string, folder string) (string, error) {
+	reader := bytes.NewReader([]byte(snapshotname))
+
+	properties := make(map[string]string)
+	properties["OZB"] = "true"
+	properties["OZB_uuid"] = snapshotUUID
+	properties["OZB_filename"] = snapshotname
+	properties["OZB_chunk"] = "0"
+	properties["OZB_storesize"] = fmt.Sprintf("%d", len(snapshotname))
+	properties["OZB_filetype"] = "latest"
+	properties["OZB_subvolume"] = subvolume
+	properties["OZB_date"] = fmt.Sprintf("%d", time.Now().Unix())
+	properties["OZB_type"] = "latest"
+	filename := fmt.Sprintf("%s|latest", snapshotname)
+
+	var file *drive.File
+
+	parent := FindOrCreateFolder(folder)
+
+	file, err := FindLatest(parent, subvolume)
+	if file.Id == "" {
+		var parents []string
+		parents = append(parents, parent)
+		file, err = srv.
+			Files.
+			Create(&drive.File{Name: filename, Parents: parents, Properties: properties}).
+			Media(reader).
+			Do()
+	} else {
+		file, err = srv.
+			Files.
+			Update(file.Id, &drive.File{Name: filename, Properties: properties}).
+			Media(reader).
+			Do()
+	}
+	if err != nil {
+		return "", err
+	}
+
+	return file.Id, nil
 }
 
 func Upload(meta *ChunkInfo, parent string, reader io.Reader, opt_wantedMD5 string) (*drive.File, error) {
@@ -243,9 +325,13 @@ type ParentFilter struct {
 	Qualifying   []string
 }
 
-func findId(wanted string, parentID string) (string, error) {
-	p := ParentFilter{Parent: "", WantedParent: wanted}
-	fileList, err := srv.Files.List().Fields("nextPageToken, files(id, name, parents)").Q("name = '" + p.WantedParent + "' AND '" + parentID + "' in parents AND trashed = false").Do()
+func findFileIdInParentId(wantedFileName string, parentID string) (string, error) {
+	fileList, err := srv.
+		Files.
+		List().
+		Fields("nextPageToken, files(id, name, parents)").
+		Q("name = '" + wantedFileName + "' AND '" + parentID + "' in parents AND trashed = false").
+		Do()
 	if err != nil {
 		return "", err
 	}
@@ -262,9 +348,12 @@ type folderSearch struct {
 }
 
 func (this *folderSearch) add(list *drive.FileList) error {
-	for _, file := range list.Files {
-		this.callback(file)
+	if this.callback != nil {
+		for _, file := range list.Files {
+			this.callback(file)
+		}
 	}
+	this.files = append(this.files, list.Files...)
 	return nil
 }
 
@@ -272,13 +361,16 @@ func (this *folderSearch) Files() []*drive.File {
 	return this.files
 }
 
-func findInFolder(parentID string, fileType string, callback func(*drive.File)) (*folderSearch, error) {
+func FindInFolder(parentID string, fileType string, subvolume string, callback func(*drive.File)) (*folderSearch, error) {
 	search := folderSearch{callback: callback}
 
 	query := "'" + parentID + "' in parents AND trashed = false AND properties has { key='OZB_type' and value='metadata' }"
 
 	if fileType != "" {
-		query += "AND properties has { key='OZB_filetype' and value='" + fileType + "' }"
+		query += " AND properties has { key='OZB_filetype' and value='" + fileType + "' }"
+	}
+	if subvolume != "" {
+		query += " AND properties has { key='OZB_subvolume' and value='" + subvolume + "' }"
 	}
 
 	err := srv.Files.
@@ -370,7 +462,10 @@ var srv *drive.Service
 func InitGoogleDrive() {
 	ctx := context.Background()
 
-	b, err := ioutil.ReadFile("client_secret.json")
+	usr, err := user.Current()
+	Common.PrintAndExitOnError(err, 1)
+	fmt.Fprintln(os.Stderr, usr.Username)
+	b, err := ioutil.ReadFile(usr.HomeDir + "/.OZB.json")
 	if err != nil {
 		log.Fatalf("Unable to read client secret file: %v", err)
 	}
@@ -417,7 +512,7 @@ func createFolder(name string) (string, error) {
 }
 
 func ListFiles(parent string) {
-	files, err := findInFolder(parent, "file", func(file *drive.File) {
+	files, err := FindInFolder(parent, "", "", func(file *drive.File) {
 		fmt.Fprintln(os.Stderr, file.Properties["OZB_date"])
 
 		size, _ := strconv.ParseUint(file.Properties["OZB_storesize"], 10, 64)
@@ -441,7 +536,7 @@ func ListFiles(parent string) {
 }
 
 func FindOrCreateFolder(name string) string {
-	parent, err := findId(name, "root")
+	parent, err := findFileIdInParentId(name, "root")
 	if err != nil {
 		if err == E_NOPARENT {
 			parent, err = createFolder(name)
