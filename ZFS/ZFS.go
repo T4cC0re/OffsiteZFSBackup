@@ -75,8 +75,6 @@ func (this *Manager) CreateSnapshot(subvolume string) string {
 }
 
 func (this *Manager) Stream(snapshot string, parentSnapshot string) (io.ReadCloser, error) {
-	fmt.Fprintln(os.Stderr, "NOT TESTED, YET!")
-
 	var command *exec.Cmd
 	if parentSnapshot == "" {
 		command = exec.Command("zfs", "send", snapshot)
@@ -95,4 +93,22 @@ func (this *Manager) Stream(snapshot string, parentSnapshot string) (io.ReadClos
 	}
 
 	return rc, nil
+}
+
+func (this *Manager) Restore(targetSubvolume string) (io.WriteCloser, error) {
+	fmt.Fprintln(os.Stderr, "NOT TESTED, YET!")
+
+	command := exec.Command("zfs", "receive", targetSubvolume)
+
+	wc, err := command.StdinPipe()
+	command.Stderr = os.Stderr
+	if err != nil {
+		return nil, err
+	}
+	err = command.Start()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return wc, nil
 }

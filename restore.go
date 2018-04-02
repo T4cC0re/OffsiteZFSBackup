@@ -8,6 +8,7 @@ import (
 	"./Btrfs"
 	"./Common"
 	"./GoogleDrive"
+	"./Abstractions"
 	"./ZFS"
 )
 
@@ -36,9 +37,15 @@ func restoreCommand() {
 		local := manager.IsAvailableLocally(snap.Filename)
 		fmt.Fprintf(os.Stderr, "%s - exists?: %v\n", snap.Filename, local)
 
-		if local != false {
+		//if local == true {
+		//	break
+		//}
 
-		}
+		wc, err := manager.Restore("vault/test123")
+		Common.PrintAndExitOnError(err, 1)
+		downloader := Abstractions.NewDownloader(wc, *folder, snap.Uuid, *passphrase)
+		meta, err := downloader.Download()
+		fmt.Fprintln(os.Stderr, meta, err)
 	}
 }
 

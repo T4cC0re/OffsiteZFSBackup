@@ -20,6 +20,7 @@ type SnapshotManager interface {
 	IsAvailableLocally(snapshot string) bool
 	ListLocalSnapshots() []string
 	Stream(snapshot string, parentSnapshot string) (io.ReadCloser, error)
+	Restore(targetSubvolume string) (io.WriteCloser, error)
 }
 
 func CreateHMAC(hash func() hash.Hash, passphrase string) hash.Hash {

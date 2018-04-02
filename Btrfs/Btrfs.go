@@ -114,23 +114,22 @@ func (this *Manager) Stream(snapshot string, parentSnapshot string) (io.ReadClos
 	return rc, nil
 }
 
-//
-//func (this *Manager) ListRemoteSnapshots(subvolume string) []Common.Snapshot {
+func (this *Manager) Restore(targetSubvolume string) (io.WriteCloser, error) {
+	fmt.Fprintln(os.Stderr, "NOT IMPLEMENTED, YET!")
+	return nil, nil
 
-////////this.parent = GoogleDrive.FindOrCreateFolder(folder)
-//	search, err := GoogleDrive.FindInFolder(this.parent, "btrfs", subvolume, nil)
-//
-//	fmt.Fprintln(os.Stderr, search, err)
-//
-//	var snapshots []Common.Snapshot
-//	for _, file := range search.Files() {
-//		fmt.Fprintln(os.Stderr, file.Properties)
-//		snap := ParseBtrfsSnapshot(file.Properties["OZB_filename"])
-//		if snap == nil {
-//			continue
-//		}
-//		snap.UUID = file.Properties["OZB_uuid"]
-//		snapshots = append(snapshots, *snap)
-//	}
-//	return snapshots
-//}
+	/// ZFS implementation below
+	command := exec.Command("zfs", "receive", targetSubvolume)
+
+	wc, err := command.StdinPipe()
+	command.Stderr = os.Stderr
+	if err != nil {
+		return nil, err
+	}
+	err = command.Start()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return wc, nil
+}
