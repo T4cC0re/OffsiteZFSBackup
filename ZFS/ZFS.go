@@ -26,7 +26,6 @@ func NewManager(folder string) *Manager {
 }
 
 func (this *Manager) ListLocalSnapshots() []string {
-	fmt.Fprintln(os.Stderr, "NOT TESTED, YET!")
 	cmd := exec.Command("zfs", "list", "-Ht", "snapshot")
 	var out bytes.Buffer
 	cmd.Stdout = &out
@@ -39,18 +38,15 @@ func (this *Manager) ListLocalSnapshots() []string {
 
 	for _, snapshot := range strings.Split(out.String(), "\n") {
 		snap := strings.Split(snapshot, "\t")[0]
-		fmt.Fprintln(os.Stderr, snap)
 		if snap != "" {
 			snapshots = append(snapshots, snap)
 		}
 	}
 
-	fmt.Fprintln(os.Stderr, snapshots)
 	return snapshots
 }
 
 func (this *Manager) IsAvailableLocally(snapshot string) bool {
-	fmt.Fprintln(os.Stderr, "NOT TESTED, YET!")
 	for _, snap := range this.ListLocalSnapshots() {
 		if snapshot == snap {
 			return true
@@ -60,7 +56,6 @@ func (this *Manager) IsAvailableLocally(snapshot string) bool {
 }
 
 func (this *Manager) CreateSnapshot(subvolume string) string {
-	fmt.Fprintln(os.Stderr, "NOT TESTED, YET!")
 	snapshotname := fmt.Sprintf(
 		"%s@%d",
 		subvolume,
