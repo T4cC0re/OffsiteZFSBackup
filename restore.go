@@ -27,7 +27,7 @@ func restoreCommand() {
 	case "zfs":
 		manager = ZFS.NewManager(*folder)
 	default:
-		fmt.Fprintln(os.Stderr, "--backup only supports btrfs and zfs.")
+		fmt.Fprintln(os.Stderr, "--restore only supports btrfs and zfs.")
 		os.Exit(1)
 	}
 
