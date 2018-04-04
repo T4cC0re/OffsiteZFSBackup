@@ -30,7 +30,7 @@ type Uploader struct {
 	parent      string
 	fileType    string
 	subvolume   string
-	Parent string
+	Parent      string
 }
 
 func NewUploader(r io.ReadCloser, fileType string, subvolume string, folder string, filename string, passphrase string, encryption string, authentication string, chunksize int) *Uploader {
@@ -134,7 +134,7 @@ func (this *Uploader) Upload() (*GoogleDrive.Metadata, error) {
 		FileType:       this.fileType,
 		Subvolume:      this.subvolume,
 		Date:           this.timestamp,
-		Parent:			this.Parent,
+		Parent:         this.Parent,
 	}
 
 	//Print summary:

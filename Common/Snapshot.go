@@ -1,6 +1,6 @@
 package Common
 
 type Snapshot struct {
-	Uuid string
+	Uuid     string
 	Filename string
 }
