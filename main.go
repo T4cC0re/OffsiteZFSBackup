@@ -20,8 +20,9 @@ var (
 	chunksize      = flag.Int("chunksize", 256, "Chunksize for files in MiB. Note: You need this space on disk during up- & download!")
 	backup         = flag.String("backup", "", "Specify 'btrfs' or 'zfs' to backup a snapshot")
 	restore        = flag.String("restore", "", "Specify 'btrfs' or 'zfs' to restore a snapshot")
-	subvolume = flag.String("subvolume", "", "Subvolume to backup/restore to (btrfs/zfs only)")
-	latest    = flag.Bool("latest", false, "Grab latest successfully uploaded snapshot for --subvolume")
+	restoreTarget  = flag.String("restoretarger", "", "Specivy a zfs/btrfs subvolume to restore to")
+	subvolume      = flag.String("subvolume", "", "Subvolume to backup/restore to (btrfs/zfs only)")
+	latest         = flag.Bool("latest", false, "Grab latest successfully uploaded snapshot for --subvolume")
 )
 
 func main() {

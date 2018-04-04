@@ -5,16 +5,20 @@ import (
 	"os"
 	"strings"
 
+	"./Abstractions"
 	"./Btrfs"
 	"./Common"
 	"./GoogleDrive"
-	"./Abstractions"
 	"./ZFS"
 )
 
 func restoreCommand() {
 	if *subvolume == "" {
 		fmt.Fprintln(os.Stderr, "Must specify --subvolume")
+		os.Exit(1)
+	}
+	if *restoreTarget == "" {
+		fmt.Fprintln(os.Stderr, "Must specify --restoretarget")
 		os.Exit(1)
 	}
 
@@ -41,9 +45,15 @@ func restoreCommand() {
 		//	break
 		//}
 
-		wc, err := manager.Restore("vault/test123")
+		wc, err := manager.Restore(*restoreTarget)
 		Common.PrintAndExitOnError(err, 1)
-		downloader := Abstractions.NewDownloader(wc, *folder, snap.Uuid, *passphrase)
+		downloader, err := Abstractions.NewDownloader(wc, *folder, snap.Uuid, *passphrase)
+		if err != nil {
+			if err == Abstractions.E_NO_DATA {
+				fmt.Fprintln(os.Stderr, "Snapshot has no data, skipping...")
+				continue
+			}
+		}
 		meta, err := downloader.Download()
 		fmt.Fprintln(os.Stderr, meta, err)
 	}

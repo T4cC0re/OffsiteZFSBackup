@@ -27,8 +27,9 @@ type Downloader struct {
 }
 
 var E_HMAC_MISMATCH = errors.New("HMACs do not match. File has been tampered with, or was not transferred correctly")
+var E_NO_DATA = errors.New("data is 0 bytes")
 
-func NewDownloader(w io.Writer, folder string, filename string, passphrase string) *Downloader {
+func NewDownloader(w io.Writer, folder string, filename string, passphrase string) (*Downloader, error) {
 	this := &Downloader{}
 
 	var writers []io.Writer
@@ -39,7 +40,11 @@ func NewDownloader(w io.Writer, folder string, filename string, passphrase strin
 	var err error
 	this.metadata, err = GoogleDrive.FetchMetadata(filename, parent)
 	if err != nil {
-		panic(err)
+		return nil, err
+	}
+
+	if this.metadata.TotalSizeIn == 0 {
+		return nil, E_NO_DATA
 	}
 
 	var read io.Reader
@@ -67,7 +72,7 @@ func NewDownloader(w io.Writer, folder string, filename string, passphrase strin
 	this.zr = lz4.NewReader(nil)
 	this.zr.Reset(read)
 
-	return this
+	return this, nil
 }
 
 func (this *Downloader) close() error {
