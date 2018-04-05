@@ -43,6 +43,7 @@ func NewDownloader(w io.Writer, folder string, filename string, passphrase strin
 		return nil, err
 	}
 
+	fmt.Fprintln(os.Stderr, this.metadata.TotalSizeIn)
 	if this.metadata.TotalSizeIn == 0 {
 		return nil, E_NO_DATA
 	}
