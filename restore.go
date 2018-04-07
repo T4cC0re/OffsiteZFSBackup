@@ -45,15 +45,17 @@ func restoreCommand() {
 		//	break
 		//}
 
-		wc, err := manager.Restore(*restoreTarget)
-		Common.PrintAndExitOnError(err, 1)
-		downloader, err := Abstractions.NewDownloader(wc, *folder, snap.Uuid, *passphrase)
+		wp := Abstractions.WriteProxy{}
+		downloader, err := Abstractions.NewDownloader(wp, *folder, snap.Uuid, *passphrase)
 		if err != nil {
 			if err == Abstractions.E_NO_DATA {
 				fmt.Fprintln(os.Stderr, "Snapshot has no data, skipping...")
 				continue
 			}
 		}
+		wc, err := manager.Restore(*restoreTarget)
+		Common.PrintAndExitOnError(err, 1)
+		wp.Proxified = wc
 		meta, err := downloader.Download()
 		fmt.Fprintln(os.Stderr, meta, err)
 	}
