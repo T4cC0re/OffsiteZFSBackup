@@ -5,15 +5,12 @@ import (
 )
 
 type WriteProxy struct {
-	io.WriteCloser
-	Proxified io.WriteCloser
+	io.Writer
+	Proxified io.Writer
 }
 
 func (this *WriteProxy) Write(p []byte) (int, error) {
 	n, err := this.Proxified.Write(p)
 
 	return n, err
-}
-func (this *WriteProxy) Close() error {
-	return this.Proxified.Close()
 }

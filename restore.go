@@ -45,7 +45,7 @@ func restoreCommand() {
 		//	break
 		//}
 
-		wp := Abstractions.WriteProxy{}
+		wp := &Abstractions.WriteProxy{}
 		downloader, err := Abstractions.NewDownloader(wp, *folder, snap.Uuid, *passphrase)
 		if err != nil {
 			if err == Abstractions.E_NO_DATA {
