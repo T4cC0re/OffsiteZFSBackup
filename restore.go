@@ -75,7 +75,10 @@ func buildChain() []Common.Snapshot {
 	var chain []Common.Snapshot
 
 	for true {
-		fs, _ := GoogleDrive.FetchMetadata(latestUuid, GoogleDrive.FindOrCreateFolder(*folder))
+		fs, err := GoogleDrive.FetchMetadata(latestUuid, GoogleDrive.FindOrCreateFolder(*folder))
+		if err != nil {
+			panic(err)
+		}
 		latestUuid = fs.Uuid
 		latestName = fs.FileName
 		latestParent := fs.Parent

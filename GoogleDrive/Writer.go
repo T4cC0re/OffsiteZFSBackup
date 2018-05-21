@@ -36,7 +36,14 @@ type Writer struct {
 }
 
 func NewGoogleDriveWriter(meta *MetadataBase, parentID string, cacheSize int) (*Writer, error) {
-	cache, err := ioutil.TempFile("", WRITE_CACHE_FILENAME)
+	tmpBase := ""
+	stat, err := os.Stat("/dev/shm")
+	if err == nil && stat.IsDir() {
+		tmpBase = "/dev/shm"
+		fmt.Fprintln(os.Stderr, "Using shared memory as cache...")
+	}
+
+	cache, err := ioutil.TempFile(tmpBase, WRITE_CACHE_FILENAME)
 	if err != nil {
 		return nil, err
 	}

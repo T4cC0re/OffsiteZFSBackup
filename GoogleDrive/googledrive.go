@@ -335,6 +335,7 @@ func findFileIdInParentId(wantedFileName string, parentID string) (string, error
 	if err != nil {
 		return "", err
 	}
+
 	for _, file := range fileList.Files {
 		return file.Id, nil
 	}
@@ -353,6 +354,7 @@ func (this *folderSearch) add(list *drive.FileList) error {
 			this.callback(file)
 		}
 	}
+
 	this.files = append(this.files, list.Files...)
 	return nil
 }
@@ -369,6 +371,7 @@ func FindInFolder(parentID string, fileType string, subvolume string, callback f
 	if fileType != "" {
 		query += " AND properties has { key='OZB_filetype' and value='" + fileType + "' }"
 	}
+
 	if subvolume != "" {
 		query += " AND properties has { key='OZB_subvolume' and value='" + subvolume + "' }"
 	}
@@ -392,11 +395,13 @@ func getClient(ctx context.Context, config *oauth2.Config) *http.Client {
 	if err != nil {
 		log.Fatalf("Unable to get path to cached credential file. %v", err)
 	}
+
 	tok, err := tokenFromFile(cacheFile)
 	if err != nil {
 		tok = getTokenFromWeb(config)
 		saveToken(cacheFile, tok)
 	}
+
 	return config.Client(ctx, tok)
 }
 
@@ -416,6 +421,7 @@ func getTokenFromWeb(config *oauth2.Config) *oauth2.Token {
 	if err != nil {
 		log.Fatalf("Unable to retrieve token from web %v", err)
 	}
+
 	return tok
 }
 
@@ -428,6 +434,7 @@ func tokenCacheFile() (string, error) {
 	}
 	tokenCacheDir := filepath.Join(usr.HomeDir, ".credentials")
 	os.MkdirAll(tokenCacheDir, 0700)
+
 	return filepath.Join(tokenCacheDir,
 		url.QueryEscape("offsite-zfs-backup.json")), err
 }
@@ -439,9 +446,11 @@ func tokenFromFile(file string) (*oauth2.Token, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	t := &oauth2.Token{}
 	err = json.NewDecoder(f).Decode(t)
 	defer f.Close()
+
 	return t, err
 }
 
