@@ -11,6 +11,7 @@ import (
 var (
 	upload         = flag.String("upload", "", "Filename to upload from stdin")
 	list           = flag.Bool("list", false, "List files available")
+	chain          = flag.Bool("chain", false, "Display chain of snapshots to restore (can take some time for large datasets)")
 	download       = flag.String("download", "", "UUID to download to stdout")
 	authentication = flag.String("authentication", "HMAC-SHA3-512", "Define the authentication to use (NONE, HMAC-SHA[3-]{256,512})")
 	encryption     = flag.String("encryption", "AES-CTR", "Define the encryption to use (NONE, AES-{CTR,OFB,CFB})")
@@ -43,6 +44,8 @@ func main() {
 		parent := GoogleDrive.FindOrCreateFolder(*folder)
 		GoogleDrive.ListFiles(parent)
 		os.Exit(0)
+	case *chain:
+		chainCommand()
 	case *backup != "":
 		backupCommand()
 	case *restore != "":

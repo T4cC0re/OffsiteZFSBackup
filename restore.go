@@ -10,7 +10,27 @@ import (
 	"./Common"
 	"./GoogleDrive"
 	"./ZFS"
+	"github.com/dustin/go-humanize"
 )
+
+func chainCommand() {
+	if *subvolume == "" {
+		fmt.Fprintln(os.Stderr, "Must specify --subvolume")
+		os.Exit(1)
+	}
+
+
+	var sizeOnDisk uint64 = 0
+	var downloadSize uint64 = 0
+
+	chain := buildChain(false)
+	for _, snap := range chain {
+		sizeOnDisk += snap.DiskSize
+		downloadSize += snap.DownloadSize
+	}
+
+	fmt.Fprintf(os.Stderr, "%s\n\t- %d Snapshots\n\t- Size on Disk: %s\n\t- Size to Download: %s\n", *subvolume, len(chain), humanize.IBytes(sizeOnDisk), humanize.IBytes(downloadSize))
+}
 
 func restoreCommand() {
 	if *subvolume == "" {
