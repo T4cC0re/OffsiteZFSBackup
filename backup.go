@@ -33,7 +33,11 @@ func backupCommand() {
 	latestUploaded, err := GoogleDrive.FindLatest(GoogleDrive.FindOrCreateFolder(*folder), *subvolume)
 
 	manager.ListLocalSnapshots()
-	snap := manager.CreateSnapshot(*subvolume)
+	snap, err := manager.CreateSnapshot(*subvolume)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		os.Exit(1)
+	}
 
 	var parentUuid string
 	var parentName string
@@ -58,4 +62,15 @@ func backupCommand() {
 	Common.PrintAndExitOnError(err, 1)
 
 	fmt.Fprintf(os.Stderr, "FileID of state: %s\n", fileId)
+
+	if parentName != "" {
+		_, err = manager.DeleteSnapshot(parentName)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "An error occured while deleting parent snapshot:\n%s\n", err.Error())
+		} else {
+			fmt.Fprintln(os.Stderr, "Succesfully deleted previously parent!")
+		}
+	} else {
+		fmt.Fprintln(os.Stderr, "no parent to delete")
+	}
 }
