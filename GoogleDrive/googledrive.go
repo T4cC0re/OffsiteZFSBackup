@@ -1,9 +1,12 @@
 package GoogleDrive
 
 import (
+	"bytes"
+	"crypto/md5"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -11,20 +14,16 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
 
 	"../Common"
-	"bytes"
-	"crypto/md5"
 	"github.com/dustin/go-humanize"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/drive/v3"
-	"io"
-	"regexp"
-	"strconv"
-	"strings"
-	"time"
 )
 
 var (
@@ -64,31 +63,6 @@ type ChunkInfo struct {
 	Authentication string
 	IsData         bool
 	Chunk          uint
-}
-
-var chunkInfoRegexp = regexp.MustCompile(`(?mi)^([a-z0-9]{8}-[a-z0-9]{4}-4[a-z0-9]{3}-[89ab][a-z0-9]{3}-[a-z0-9]{12})\|([^|]+)\|([^|]+)\|([^|]+)\|(D|M)\|(\d+)$`)
-
-// DEPRECATED
-func ParseFileName(filename string) (*ChunkInfo, error) {
-	matches := chunkInfoRegexp.FindStringSubmatch(filename)
-	if matches == nil || len(matches) != 7 {
-		return nil, E_CHUNKINFO
-	}
-
-	chunkInfo := ChunkInfo{}
-	chunkInfo.Uuid = matches[1]
-	chunkInfo.FileName = matches[2]
-	chunkInfo.Encryption = matches[3]
-	chunkInfo.Authentication = matches[4]
-	chunkInfo.IsData = matches[5] == "D"
-	chunk, err := strconv.ParseUint(matches[6], 10, 32)
-	if err != nil {
-		return nil, err
-	}
-
-	chunkInfo.Chunk = uint(chunk)
-
-	return &chunkInfo, nil
 }
 
 func FetchMetadata(uuid string, parent string) (*Metadata, error) {
@@ -201,7 +175,7 @@ func SaveLatest(snapshotname string, snapshotUUID string, subvolume string, fold
 	properties["OZB_subvolume"] = subvolume
 	properties["OZB_date"] = fmt.Sprintf("%d", time.Now().Unix())
 	properties["OZB_type"] = "latest"
-	filename := fmt.Sprintf("%s|latest", snapshotname)
+	filename := fmt.Sprintf("%s|latest", subvolume)
 
 	var file *drive.File
 
@@ -284,7 +258,6 @@ func Download(fileId string, opt_wantedMD5 string, writer *os.File) (int64, erro
 
 	res, err := srv.Files.
 		Get(fileId).
-		//AcknowledgeAbuse(true).
 		Download()
 	if err != nil {
 		return 0, err
