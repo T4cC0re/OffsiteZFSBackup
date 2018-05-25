@@ -37,7 +37,9 @@ func restoreCommand() {
 
 	fmt.Fprintln(os.Stderr, manager.ListLocalSnapshots())
 
-	for _, snap := range buildChain() {
+	var previous string
+
+	for _, snap := range buildChain(false) {
 		local := manager.IsAvailableLocally(snap.Filename)
 		fmt.Fprintf(os.Stderr, "%s - exists?: %v\n", snap.Filename, local)
 
@@ -58,33 +60,43 @@ func restoreCommand() {
 		wp.Proxified = wc
 		meta, err := downloader.Download()
 		fmt.Fprintln(os.Stderr, meta, err)
+
+		if previous != "" {
+			manager.DeleteSnapshot(previous)
+		}
+		previous = snap.Filename
 	}
 }
 
-func buildChain() []Common.Snapshot {
-	latestUploaded, err := GoogleDrive.FindLatest(GoogleDrive.FindOrCreateFolder(*folder), *subvolume)
+func buildChain(print bool) []Common.SnapshotWithSize {
+	folderId := GoogleDrive.FindOrCreateFolder(*folder)
+	latestUploaded, err := GoogleDrive.FindLatest(folderId, *subvolume)
 	Common.PrintAndExitOnError(err, 1)
 
 	if latestUploaded == nil {
-		return []Common.Snapshot{}
+		return []Common.SnapshotWithSize{}
 	}
 
 	latestUuid := latestUploaded.Properties["OZB_uuid"]
 	latestName := latestUploaded.Properties["OZB_filename"]
 
-	var chain []Common.Snapshot
+	var chain []Common.SnapshotWithSize
 
 	for true {
-		fs, err := GoogleDrive.FetchMetadata(latestUuid, GoogleDrive.FindOrCreateFolder(*folder))
+		fs, err := GoogleDrive.FetchMetadata(latestUuid, folderId)
 		if err != nil {
 			panic(err)
 		}
 		latestUuid = fs.Uuid
 		latestName = fs.FileName
 		latestParent := fs.Parent
-		snap := Common.Snapshot{Uuid: latestUuid, Filename: latestName}
-		fmt.Fprintf(os.Stderr, "snapshot:\n\t- UUID: %s\n\t- Name: %s\n\t- Parent: %s\n", latestUuid, latestName, latestParent)
-		chain = append([]Common.Snapshot{snap}, chain...)
+		downloadSize := fs.TotalSize
+		diskSize := fs.TotalSizeIn
+		snap := Common.SnapshotWithSize{Uuid: latestUuid, Filename: latestName, DownloadSize:downloadSize, DiskSize: diskSize}
+		if print {
+			fmt.Fprintf(os.Stderr, "snapshot:\n\t- UUID: %s\n\t- Name: %s\n\t- Parent: %s\n", latestUuid, latestName, latestParent)
+		}
+		chain = append([]Common.SnapshotWithSize{snap}, chain...)
 		if latestParent == "" {
 			break
 		}
