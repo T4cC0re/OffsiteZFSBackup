@@ -27,6 +27,7 @@ func NewManager(folder string) *Manager {
 
 func (this *Manager) ListLocalSnapshots() []string {
 	cmd := exec.Command("zfs", "list", "-Ht", "snapshot")
+
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	err := cmd.Run()
@@ -55,7 +56,7 @@ func (this *Manager) IsAvailableLocally(snapshot string) bool {
 	return false
 }
 
-func (this *Manager) CreateSnapshot(subvolume string) string {
+func (this *Manager) CreateSnapshot(subvolume string) (string, error) {
 	snapshotname := fmt.Sprintf(
 		"%s@%d",
 		subvolume,
@@ -63,15 +64,39 @@ func (this *Manager) CreateSnapshot(subvolume string) string {
 	)
 	cmd := exec.Command("zfs", "snapshot", snapshotname)
 
-	var out bytes.Buffer
-	cmd.Stdout = &out
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	err := cmd.Run()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return ""
+		return "", err
 	}
 
-	return strings.TrimLeft(snapshotname, "/")
+	cmd = exec.Command("zfs", "hold", "keep", snapshotname)
+
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err = cmd.Run()
+	if err != nil {
+		return "", err
+	}
+
+	return strings.TrimLeft(snapshotname, "/"), nil
+}
+
+func (this *Manager) DeleteSnapshot(snapshot string) (bool, error) {
+	if !strings.Contains(snapshot, "@") {
+		return false, Common.E_INVALID_SNAPSHOT
+	}
+	cmd := exec.Command("zfs", "destroy", "-d", snapshot)
+
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err := cmd.Run()
+	if err != nil {
+		return false, err
+	}
+
+	return true, nil
 }
 
 func (this *Manager) Stream(snapshot string, parentSnapshot string) (io.ReadCloser, error) {
@@ -96,8 +121,6 @@ func (this *Manager) Stream(snapshot string, parentSnapshot string) (io.ReadClos
 }
 
 func (this *Manager) Restore(targetSubvolume string) (io.WriteCloser, error) {
-	fmt.Fprintln(os.Stderr, "NOT TESTED, YET!")
-
 	command := exec.Command("zfs", "receive", targetSubvolume)
 
 	wc, err := command.StdinPipe()
