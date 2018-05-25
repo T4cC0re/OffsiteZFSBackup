@@ -4,13 +4,14 @@ import (
 	"../Common"
 	"../GoogleDrive"
 	"bytes"
-	"encoding/base64"
 	"fmt"
+	"hash/crc32"
 	"io"
 	"log"
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -73,24 +74,40 @@ func ParseBtrfsSnapshot(snapshot string) string {
 	return "/" + matches[1]
 }
 
-func (this *Manager) CreateSnapshot(subvolume string) string {
+func (this *Manager) CreateSnapshot(subvolume string) (string, error) {
 	snapshotname := fmt.Sprintf(
 		"%s/%s@%d",
 		snapshotdir,
-		base64.RawURLEncoding.EncodeToString([]byte(subvolume)),
+		strconv.FormatUint(uint64(crc32.ChecksumIEEE([]byte(subvolume))),16),
 		time.Now().Unix(),
 	)
 	cmd := exec.Command("btrfs", "subvolume", "snapshot", "-r", subvolume, snapshotname)
 
-	var out bytes.Buffer
-	cmd.Stdout = &out
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	err := cmd.Run()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return ""
+		return "", err
 	}
 
-	return snapshotname
+	return snapshotname, nil
+}
+
+func (this *Manager) DeleteSnapshot(snapshot string) (bool, error) {
+	if !strings.Contains(snapshot, "@") {
+		return false, Common.E_INVALID_SNAPSHOT
+	}
+
+	cmd := exec.Command("btrfs", "subvolume", "delete", snapshot)
+
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err := cmd.Run()
+	if err != nil {
+		return false, err
+	}
+
+	return true, nil
 }
 
 func (this *Manager) Stream(snapshot string, parentSnapshot string) (io.ReadCloser, error) {
