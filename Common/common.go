@@ -15,10 +15,13 @@ import (
 	"strings"
 )
 
+var E_INVALID_SNAPSHOT = errors.New("given input is not a valid snapshot")
+
 type SnapshotManager interface {
-	CreateSnapshot(subvolume string) string
+	CreateSnapshot(subvolume string) (string, error)
 	IsAvailableLocally(snapshot string) bool
 	ListLocalSnapshots() []string
+	DeleteSnapshot(snapshot string) (bool, error)
 	Stream(snapshot string, parentSnapshot string) (io.ReadCloser, error)
 	Restore(targetSubvolume string) (io.WriteCloser, error)
 }
