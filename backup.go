@@ -35,7 +35,7 @@ func backupCommand() {
 	manager.ListLocalSnapshots()
 	snap, err := manager.CreateSnapshot(*subvolume)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
+		fmt.Fprintln(os.Stderr, "Failed to create snapshot", err.Error())
 		os.Exit(1)
 	}
 
