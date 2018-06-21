@@ -80,7 +80,13 @@ func FetchMetadata(uuid string, parent string) (*Metadata, error) {
 		res, err = srv.Files.Get(file.Id).Download()
 		break
 	}
-	defer res.Body.Close()
+	if err != nil {
+		return nil, err
+	}
+	if res == nil {
+		return nil, errors.New("empty response")
+	}
+ 	defer res.Body.Close()
 
 	marshalled, err := ioutil.ReadAll(res.Body)
 	if err != nil {
