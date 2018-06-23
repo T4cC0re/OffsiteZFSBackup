@@ -79,8 +79,6 @@ func FetchMetadata(uuid string, parent string) (*Metadata, error) {
 		return nil, err
 	}
 
-	fmt.Fprint(os.Stderr, files)
-
 	var res *http.Response
 	for _, file := range files.Files {
 		res, err = srv.Files.Get(file.Id).Download()
@@ -457,7 +455,6 @@ func InitGoogleDrive() {
 
 	usr, err := user.Current()
 	Common.PrintAndExitOnError(err, 1)
-	fmt.Fprintln(os.Stderr, usr.Username)
 	b, err := ioutil.ReadFile(usr.HomeDir + "/.OZB.json")
 	if err != nil {
 		log.Fatalf("Unable to read client secret file: %v", err)

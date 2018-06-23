@@ -23,7 +23,7 @@ func chainCommand() {
 	var sizeOnDisk uint64 = 0
 	var downloadSize uint64 = 0
 
-	chain := buildChain(false)
+	chain := buildChain(true)
 	for _, snap := range chain {
 		sizeOnDisk += snap.DiskSize
 		downloadSize += snap.DownloadSize

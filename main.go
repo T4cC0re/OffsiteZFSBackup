@@ -1,11 +1,14 @@
 package main
 
 import (
-	"./GoogleDrive"
+	"encoding/base64"
 	"flag"
 	"fmt"
 	"os"
 	"runtime"
+
+	"./GoogleDrive"
+	"github.com/nightlyone/lockfile"
 )
 
 var (
@@ -37,6 +40,25 @@ func main() {
 
 	if *quota {
 		GoogleDrive.DisplayQuota()
+	}
+
+
+	if *backup != "" {
+		lock, err := lockfile.New("/var/lock/" + base64.StdEncoding.EncodeToString([]byte(*subvolume)) + ".lock")
+		if err != nil {
+			fmt.Printf("Cannot init lock. reason: %v", err)
+			panic(err) // handle properly please!
+		}
+
+		err = lock.TryLock()
+
+		// Error handling is essential, as we only try to get the lock.
+		if err != nil {
+			fmt.Printf("Cannot lock %q, reason: %v", lock, err)
+			panic(err) // handle properly please!
+		}
+
+		defer lock.Unlock()
 	}
 
 	switch {
