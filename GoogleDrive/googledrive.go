@@ -66,14 +66,20 @@ type ChunkInfo struct {
 }
 
 func FetchMetadata(uuid string, parent string) (*Metadata, error) {
+	var query = "trashed = false AND properties has { key='OZB_type' and value='metadata' } AND properties has { key='OZB_uuid' and value='" + uuid + "' }"
+	if parent != "" {
+		query = "'" + parent + "' in parents AND " + query
+	}
 	files, err := srv.Files.
 		List().
 		Fields("nextPageToken, files").
-		Q("'" + parent + "' in parents AND trashed = false AND properties has { key='OZB_type' and value='metadata' } AND properties has { key='OZB_uuid' and value='" + uuid + "' }").
+		Q(query).
 		Do()
 	if err != nil {
 		return nil, err
 	}
+
+	fmt.Fprint(os.Stderr, files)
 
 	var res *http.Response
 	for _, file := range files.Files {
@@ -83,10 +89,9 @@ func FetchMetadata(uuid string, parent string) (*Metadata, error) {
 	if err != nil {
 		return nil, err
 	}
-	if res == nil {
-		return nil, errors.New("empty response")
+	if res != nil {
+		defer res.Body.Close()
 	}
- 	defer res.Body.Close()
 
 	marshalled, err := ioutil.ReadAll(res.Body)
 	if err != nil {
