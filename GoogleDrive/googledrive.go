@@ -20,6 +20,7 @@ import (
 
 	"../Common"
 	"github.com/dustin/go-humanize"
+	"github.com/hashicorp/vault/api"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -378,10 +379,18 @@ func getClient(ctx context.Context, config *oauth2.Config) *http.Client {
 		log.Fatalf("Unable to get path to cached credential file. %v", err)
 	}
 
-	tok, err := tokenFromFile(cacheFile)
-	if err != nil {
-		tok = getTokenFromWeb(config)
-		saveToken(cacheFile, tok)
+	var tok *oauth2.Token
+	if len(secretsCache) != 0 {
+		tok, err = tokenFromSecretsCache()
+		if err != nil {
+			panic(err)
+		}
+	} else {
+		tok, err = tokenFromFile(cacheFile)
+		if err != nil {
+			tok = getTokenFromWeb(config)
+			saveToken(cacheFile, tok)
+		}
 	}
 
 	return config.Client(ctx, tok)
@@ -423,6 +432,18 @@ func tokenCacheFile() (string, error) {
 
 // tokenFromFile retrieves a Token from a given file path.
 // It returns the retrieved Token and any read error encountered.
+func tokenFromSecretsCache() (*oauth2.Token, error) {
+	fmt.Println("getting token from secrets cache...")
+	data := secretsCache["offsite-zfs-backup.json"]
+
+	t := &oauth2.Token{}
+	err := json.Unmarshal([]byte(data), t)
+
+	return t, err
+}
+
+// tokenFromFile retrieves a Token from a given file path.
+// It returns the retrieved Token and any read error encountered.
 func tokenFromFile(file string) (*oauth2.Token, error) {
 	f, err := os.Open(file)
 	if err != nil {
@@ -449,24 +470,68 @@ func saveToken(file string, token *oauth2.Token) {
 }
 
 var srv *drive.Service
+var secretsCache = make(map[string]string, 0)
 
-func InitGoogleDrive() {
-	ctx := context.Background()
+func fillSecretsCache(client *api.Client) error {
+	fmt.Println("filling secrets cache...")
+	secret, err := client.Logical().Read("/secret/ozb/googledrive")
+	if err != nil {
+		return err
+	}
 
+	for k,v := range secret.Data {
+		lol, ok := v.(string)
+		if !ok {
+			return errors.New("invalid secret content")
+		}
+		secretsCache[k] = lol
+	}
+	return nil
+}
+
+func getClientSecretFromVault() ([]byte, error) {
+	fmt.Println("getting client secret from vault...")
+	if len(secretsCache) != 0 {
+		return []byte(secretsCache[".OZB.json"]), nil
+	}
+	return []byte{}, errors.New("secrets cache is empty")
+}
+
+func getClientSecretFromFile() ([]byte, error) {
 	usr, err := user.Current()
 	Common.PrintAndExitOnError(err, 1)
 	b, err := ioutil.ReadFile(usr.HomeDir + "/.OZB.json")
 	if err != nil {
-		log.Fatalf("Unable to read client secret file: %v", err)
+		return []byte{}, err
+	}
+	return b, err
+}
+
+func InitGoogleDrive(client *api.Client) {
+	ctx := context.Background()
+
+	var b []byte
+	var err error
+	if client != nil {
+		err = fillSecretsCache(client)
+		b, err = getClientSecretFromVault()
+	} else {
+		b, err = getClientSecretFromFile()
+	}
+
+	if err != nil {
+		log.Fatalf("Unable to read client secret: %v", err)
 	}
 
 	config, err := google.ConfigFromJSON(b, drive.DriveFileScope)
 	if err != nil {
 		log.Fatalf("Unable to parse client secret file to config: %v", err)
 	}
-	client := getClient(ctx, config)
+	driveClient := getClient(ctx, config)
 
-	srv, err = drive.New(client)
+	secretsCache = make(map[string]string, 0)
+
+	srv, err = drive.New(driveClient)
 	if err != nil {
 		log.Fatalf("Unable to retrieve drive Client %v", err)
 	}

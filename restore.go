@@ -19,11 +19,10 @@ func chainCommand() {
 		os.Exit(1)
 	}
 
-
 	var sizeOnDisk uint64 = 0
 	var downloadSize uint64 = 0
 
-	chain := buildChain(true)
+	chain := buildChain(false)
 	for _, snap := range chain {
 		sizeOnDisk += snap.DiskSize
 		downloadSize += snap.DownloadSize

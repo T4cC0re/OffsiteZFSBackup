@@ -9,7 +9,8 @@ import (
 
 	"./GoogleDrive"
 	"github.com/nightlyone/lockfile"
-)
+"github.com/hashicorp/vault/api"
+	)
 
 var (
 	upload         = flag.String("upload", "", "Filename to upload from stdin")
@@ -27,12 +28,26 @@ var (
 	restoreTarget  = flag.String("restoretarget", "", "Specify a zfs/btrfs subvolume to restore to")
 	subvolume      = flag.String("subvolume", "", "Subvolume to backup/restore to (btrfs/zfs only)")
 	latest         = flag.Bool("latest", false, "Grab latest successfully uploaded snapshot for --subvolume")
+	vault          = flag.String("vault", "https://vault.t4cc0.re:8200", "Vault URL to connect to")
+	vaultToken     = flag.String("vaulttoken", "", "Vault token to fetch Google Drive secrets with")
 )
 
 func main() {
 	flag.Parse()
 	runtime.GOMAXPROCS(runtime.NumCPU())
-	GoogleDrive.InitGoogleDrive()
+
+	if *vaultToken != "" {
+		vaultConfig := api.Config{Address: *vault}
+		vaultClient, err := api.NewClient(&vaultConfig)
+		if err != nil {
+			panic(err)
+		}
+		vaultClient.SetToken(*vaultToken)
+
+		GoogleDrive.InitGoogleDrive(vaultClient)
+	} else {
+		GoogleDrive.InitGoogleDrive(nil)
+	}
 
 	//for _, pair := range os.Environ() {
 	//	fmt.Println(pair)
