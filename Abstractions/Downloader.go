@@ -29,7 +29,7 @@ type Downloader struct {
 var E_HMAC_MISMATCH = errors.New("HMACs do not match. File has been tampered with, or was not transferred correctly")
 var E_NO_DATA = errors.New("data is 0 bytes")
 
-func NewDownloader(w io.Writer, folder string, filename string, passphrase string) (*Downloader, error) {
+func NewDownloader(w io.Writer, folder string, filename string, passphrase string, tmpdir string) (*Downloader, error) {
 	this := &Downloader{}
 
 	var writers []io.Writer
@@ -53,7 +53,7 @@ func NewDownloader(w io.Writer, folder string, filename string, passphrase strin
 	iv, _ := hex.DecodeString(this.metadata.IV)
 	this.mac, this.keyStream = Common.PrepareMACAndEncryption(passphrase, iv, this.metadata.Authentication, this.metadata.Encryption, true)
 
-	this.downloader, err = GoogleDrive.NewGoogleDriveReader(this.metadata)
+	this.downloader, err = GoogleDrive.NewGoogleDriveReader(this.metadata, tmpdir)
 	if err != nil {
 		panic(err)
 	}

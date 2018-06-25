@@ -34,12 +34,18 @@ type Reader struct {
 	hitEOF    bool
 }
 
-func NewGoogleDriveReader(meta *Metadata) (*Reader, error) {
-	tmpBase := ""
-	stat, err := os.Stat("/dev/shm")
-	if err == nil && stat.IsDir() {
-		tmpBase = "/dev/shm"
-		fmt.Fprintln(os.Stderr, "Using shared memory as cache...")
+func NewGoogleDriveReader(meta *Metadata, tmpBase string) (*Reader, error) {
+	if tmpBase == "" {
+		stat, err := os.Stat("/dev/shm")
+		if err == nil && stat.IsDir() {
+			tmpBase = "/dev/shm"
+			fmt.Fprintln(os.Stderr, "Using shared memory as cache...")
+		}
+	}
+
+	err := os.MkdirAll(tmpBase, 0777)
+	if err != nil {
+		return nil, err
 	}
 
 	cache, err := ioutil.TempFile(tmpBase, READ_CACHE_FILENAME)

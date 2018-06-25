@@ -35,12 +35,18 @@ type Writer struct {
 	hash         hash.Hash
 }
 
-func NewGoogleDriveWriter(meta *MetadataBase, parentID string, cacheSize int) (*Writer, error) {
-	tmpBase := ""
-	stat, err := os.Stat("/dev/shm")
-	if err == nil && stat.IsDir() {
-		tmpBase = "/dev/shm"
-		fmt.Fprintln(os.Stderr, "Using shared memory as cache...")
+func NewGoogleDriveWriter(meta *MetadataBase, parentID string, cacheSize int, tmpBase string) (*Writer, error) {
+	if tmpBase == "" {
+		stat, err := os.Stat("/dev/shm")
+		if err == nil && stat.IsDir() {
+			tmpBase = "/dev/shm"
+			fmt.Fprintln(os.Stderr, "Using shared memory as cache...")
+		}
+	}
+
+	err := os.MkdirAll(tmpBase, 0777)
+	if err != nil {
+		return nil, err
 	}
 
 	cache, err := ioutil.TempFile(tmpBase, WRITE_CACHE_FILENAME)

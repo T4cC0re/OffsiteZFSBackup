@@ -67,7 +67,7 @@ func restoreCommand() {
 		//}
 
 		wp := &Abstractions.WriteProxy{}
-		downloader, err := Abstractions.NewDownloader(wp, *folder, snap.Uuid, *passphrase)
+		downloader, err := Abstractions.NewDownloader(wp, *folder, snap.Uuid, *passphrase, *tmpdir)
 		if err != nil {
 			if err == Abstractions.E_NO_DATA {
 				fmt.Fprintln(os.Stderr, "Snapshot has no data, skipping...")

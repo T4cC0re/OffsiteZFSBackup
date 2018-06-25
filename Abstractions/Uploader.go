@@ -33,7 +33,7 @@ type Uploader struct {
 	Parent      string
 }
 
-func NewUploader(r io.ReadCloser, fileType string, subvolume string, folder string, filename string, passphrase string, encryption string, authentication string, chunksize int) *Uploader {
+func NewUploader(r io.ReadCloser, fileType string, subvolume string, folder string, filename string, passphrase string, encryption string, authentication string, chunksize int, tmpdir string) *Uploader {
 	this := &Uploader{}
 
 	this.fileType = fileType
@@ -60,7 +60,7 @@ func NewUploader(r io.ReadCloser, fileType string, subvolume string, folder stri
 
 	this.inputMeta = &GoogleDrive.MetadataBase{Uuid: id.String(), FileName: filename, IsData: true, Authentication: authenticationL, Encryption: encryptionL}
 
-	this.uploader, err = GoogleDrive.NewGoogleDriveWriter(this.inputMeta, this.parent, chunksize*1024*1024)
+	this.uploader, err = GoogleDrive.NewGoogleDriveWriter(this.inputMeta, this.parent, chunksize*1024*1024, tmpdir)
 	if err != nil {
 		panic(err)
 	}

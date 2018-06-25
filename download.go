@@ -8,7 +8,7 @@ import (
 )
 
 func downloadCommand() {
-	uploader, err := Abstractions.NewDownloader(os.Stdout, *folder, *download, *passphrase)
+	uploader, err := Abstractions.NewDownloader(os.Stdout, *folder, *download, *passphrase, *tmpdir)
 	Common.PrintAndExitOnError(err ,1)
 	meta, err := uploader.Download()
 	fmt.Fprintln(os.Stderr, meta, err)

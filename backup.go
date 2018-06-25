@@ -51,7 +51,7 @@ func backupCommand() {
 	rc, err := manager.Stream(snap, parentName)
 	Common.PrintAndExitOnError(err, 1)
 
-	uploader := Abstractions.NewUploader(rc, backupType, *subvolume, *folder, snap, *passphrase, *encryption, *authentication, *chunksize)
+	uploader := Abstractions.NewUploader(rc, backupType, *subvolume, *folder, snap, *passphrase, *encryption, *authentication, *chunksize, *tmpdir)
 	if latestUploaded != nil {
 		uploader.Parent = parentUuid
 	}

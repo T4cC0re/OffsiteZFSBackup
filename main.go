@@ -8,9 +8,9 @@ import (
 	"runtime"
 
 	"./GoogleDrive"
+	"github.com/hashicorp/vault/api"
 	"github.com/nightlyone/lockfile"
-"github.com/hashicorp/vault/api"
-	)
+)
 
 var (
 	upload         = flag.String("upload", "", "Filename to upload from stdin")
@@ -28,8 +28,9 @@ var (
 	restoreTarget  = flag.String("restoretarget", "", "Specify a zfs/btrfs subvolume to restore to")
 	subvolume      = flag.String("subvolume", "", "Subvolume to backup/restore to (btrfs/zfs only)")
 	latest         = flag.Bool("latest", false, "Grab latest successfully uploaded snapshot for --subvolume")
-	vault          = flag.String("vault", "https://vault.t4cc0.re:8200", "Vault URL to connect to")
+	vault          = flag.String("vault", "", "Vault URL to connect to")
 	vaultToken     = flag.String("vaulttoken", "", "Vault token to fetch Google Drive secrets with")
+	tmpdir         = flag.String("tmpdir", "", "Temporary folder. Default if empty: /dev/shm (in-memory) or os.TempDir if unavailable")
 )
 
 func main() {

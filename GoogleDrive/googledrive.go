@@ -485,8 +485,16 @@ func fillSecretsCache(client *api.Client) error {
 			return errors.New("invalid secret content")
 		}
 		secretsCache[k] = lol
+		fmt.Println(k)
 	}
-	return nil
+
+	if len(secretsCache) != 0 {
+		fmt.Println("filled secrets cache")
+		return nil
+	}
+
+	fmt.Println(secret)
+	return errors.New("invalid secret content (empty)")
 }
 
 func getClientSecretFromVault() ([]byte, error) {
@@ -514,6 +522,9 @@ func InitGoogleDrive(client *api.Client) {
 	var err error
 	if client != nil {
 		err = fillSecretsCache(client)
+		if err != nil {
+			panic(err)
+		}
 		b, err = getClientSecretFromVault()
 	} else {
 		b, err = getClientSecretFromFile()
