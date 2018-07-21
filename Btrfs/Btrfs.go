@@ -132,11 +132,12 @@ func (this *Manager) Stream(snapshot string, parentSnapshot string) (io.ReadClos
 }
 
 func (this *Manager) Restore(targetSubvolume string) (io.WriteCloser, error) {
-	fmt.Fprintln(os.Stderr, "NOT IMPLEMENTED, YET!")
+	fmt.Fprintln(os.Stderr, "NOT TESTED, YET!")
+
 	return nil, nil
 
 	/// ZFS implementation below
-	command := exec.Command("zfs", "receive", targetSubvolume)
+	command := exec.Command("btrfs", "receive", targetSubvolume)
 
 	wc, err := command.StdinPipe()
 	command.Stderr = os.Stderr

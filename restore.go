@@ -10,6 +10,7 @@ import (
 	"./Common"
 	"./GoogleDrive"
 	"./ZFS"
+	"./Discard"
 	"github.com/dustin/go-humanize"
 )
 
@@ -49,8 +50,10 @@ func restoreCommand() {
 		manager = Btrfs.NewManager(*folder)
 	case "zfs":
 		manager = ZFS.NewManager(*folder)
+	case "discard":
+		manager = Discard.NewManager(*folder)
 	default:
-		fmt.Fprintln(os.Stderr, "--restore only supports btrfs and zfs.")
+		fmt.Fprintln(os.Stderr, "--restore only supports btrfs, discard and zfs.")
 		os.Exit(1)
 	}
 
