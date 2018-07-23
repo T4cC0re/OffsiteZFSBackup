@@ -58,7 +58,6 @@ func main() {
 		GoogleDrive.DisplayQuota()
 	}
 
-
 	if *backup != "" {
 		lock, err := lockfile.New("/var/lock/" + base64.StdEncoding.EncodeToString([]byte(*subvolume)) + ".lock")
 		if err != nil {

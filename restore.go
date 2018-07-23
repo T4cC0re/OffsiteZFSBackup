@@ -114,7 +114,7 @@ func buildChain(print bool) []Common.SnapshotWithSize {
 		latestParent := fs.Parent
 		downloadSize := fs.TotalSize
 		diskSize := fs.TotalSizeIn
-		snap := Common.SnapshotWithSize{Uuid: latestUuid, Filename: latestName, DownloadSize:downloadSize, DiskSize: diskSize}
+		snap := Common.SnapshotWithSize{Uuid: latestUuid, Filename: latestName, DownloadSize: downloadSize, DiskSize: diskSize}
 		if print {
 			fmt.Fprintf(os.Stderr, "snapshot:\n\t- UUID: %s\n\t- Name: %s\n\t- Parent: %s\n", latestUuid, latestName, latestParent)
 		}

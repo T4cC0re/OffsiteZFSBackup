@@ -132,11 +132,7 @@ func (this *Manager) Stream(snapshot string, parentSnapshot string) (io.ReadClos
 }
 
 func (this *Manager) Restore(targetSubvolume string) (io.WriteCloser, error) {
-	fmt.Fprintln(os.Stderr, "NOT TESTED, YET!")
-
-	return nil, nil
-
-	/// ZFS implementation below
+	os.MkdirAll(targetSubvolume, 0644)
 	command := exec.Command("btrfs", "receive", targetSubvolume)
 
 	wc, err := command.StdinPipe()
