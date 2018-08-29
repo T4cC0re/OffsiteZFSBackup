@@ -7,12 +7,12 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"errors"
-	"fmt"
 	"golang.org/x/crypto/sha3"
 	"hash"
 	"io"
 	"os"
 	"strings"
+	"github.com/prometheus/common/log"
 )
 
 var E_INVALID_SNAPSHOT = errors.New("given input is not a valid snapshot")
@@ -34,9 +34,9 @@ func CreateHMAC(hash func() hash.Hash, passphrase string) hash.Hash {
 func panicIfNoPassphrase(decrypt bool, passphrase string) {
 	if passphrase == "" {
 		if decrypt {
-			panic(errors.New("must specify --passphrase for encrypted and/or authenticated backups"))
+			log.Fatal("must specify --passphrase for encrypted and/or authenticated backups")
 		} else {
-			panic(errors.New("must specify --passphrase for encryption and/or authentication"))
+			log.Fatal("must specify --passphrase for encryption and/or authentication")
 		}
 	}
 }
@@ -45,22 +45,22 @@ func PrintAndExitOnError(err error, code int) {
 	if err == nil {
 		return
 	}
-	fmt.Fprintln(os.Stderr, err)
+	log.Fatalln(err)
 	os.Exit(code)
 }
 
 func PrepareMACAndEncryption(passphrase string, iv []byte, authentication string, encryption string, decrypt bool) (hash.Hash, cipher.Stream) {
 	passwordHash := sha3.Sum256([]byte(passphrase))
 
-	fmt.Fprintf(
-		os.Stderr,
-		"DEBUG:\n\t- passhash:\t%x\n\t- IV:\t\t%x\n\t- auth:\t\t%s\n\t- encryption:\t%s\n\t- decrypt:\t%v\n",
-		passwordHash,
-		iv,
-		authentication,
-		encryption,
-		decrypt,
-	)
+	//fmt.Fprintf(
+	//	os.Stderr,
+	//	"DEBUG:\n\t- passhash:\t%x\n\t- IV:\t\t%x\n\t- auth:\t\t%s\n\t- encryption:\t%s\n\t- decrypt:\t%v\n",
+	//	passwordHash,
+	//	iv,
+	//	authentication,
+	//	encryption,
+	//	decrypt,
+	//)
 
 	var block cipher.Block
 	var err error
@@ -89,7 +89,7 @@ func PrepareMACAndEncryption(passphrase string, iv []byte, authentication string
 		panicIfNoPassphrase(decrypt, passphrase)
 		mac = CreateHMAC(sha3.New256, passphrase)
 	default:
-		panic(errors.New("unsupported authentication method"))
+		log.Fatal("unsupported authentication method")
 	}
 
 	var keyStream cipher.Stream
@@ -110,14 +110,14 @@ func PrepareMACAndEncryption(passphrase string, iv []byte, authentication string
 		panicIfNoPassphrase(decrypt, passphrase)
 		keyStream = cipher.NewCTR(block, iv)
 	default:
-		panic(errors.New("unsupported encryption method"))
+		log.Fatal("unsupported encryption method")
 	}
 
 	if keyStream != nil {
-		fmt.Fprintf(os.Stderr, "Encryption enabled .....: %s\n", strings.ToUpper(encryption))
+		log.Infof("Encryption enabled .....: %s", strings.ToUpper(encryption))
 	}
 	if mac != nil {
-		fmt.Fprintf(os.Stderr, "Authentication enabled .: %s\n", strings.ToUpper(authentication))
+		log.Infof("Authentication enabled .: %s", strings.ToUpper(authentication))
 	}
 
 	return mac, keyStream

@@ -7,13 +7,14 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
-	"log"
+	"github.com/prometheus/common/log"
 	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+	"path"
 )
 
 /*
@@ -42,7 +43,20 @@ func (this *Manager) ListLocalSnapshots() []string {
 	cmd.Stdout = &out
 	err := cmd.Run()
 	if err != nil {
-		log.Fatal(err)
+		_, statErr := os.Stat(snapshotdir)
+		// Does not exist. Create the subvolume
+		os.MkdirAll(path.Base(snapshotdir), 0777)
+		if statErr != os.ErrNotExist {
+			cmd = exec.Command("btrfs", "subvolume", "create", snapshotdir)
+			var out bytes.Buffer
+			cmd.Stdout = &out
+			err = cmd.Run()
+			if err != nil {
+				log.Fatalf("Could not create btrfs subvolume '%s': %v", snapshotdir, err)
+			}
+			return []string{}
+		}
+		log.Fatal(statErr)
 	}
 
 	var snapshots []string
@@ -78,17 +92,22 @@ func (this *Manager) CreateSnapshot(subvolume string) (string, error) {
 	snapshotname := fmt.Sprintf(
 		"%s/%s@%d",
 		snapshotdir,
-		strconv.FormatUint(uint64(crc32.ChecksumIEEE([]byte(subvolume))),16),
+		strconv.FormatUint(uint64(crc32.ChecksumIEEE([]byte(subvolume))), 16),
 		time.Now().Unix(),
 	)
 	cmd := exec.Command("btrfs", "subvolume", "snapshot", "-r", subvolume, snapshotname)
 
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
 	err := cmd.Run()
 	if err != nil {
 		return "", err
 	}
+	log.Info(strings.Trim(out.String(), "\n\r"))
+	log.Error(stderr.String())
 
 	return snapshotname, nil
 }
@@ -119,7 +138,8 @@ func (this *Manager) Stream(snapshot string, parentSnapshot string) (io.ReadClos
 	}
 
 	rc, err := command.StdoutPipe()
-	command.Stderr = os.Stderr
+	var stderr bytes.Buffer
+	command.Stderr = &stderr
 	if err != nil {
 		return nil, err
 	}
@@ -127,6 +147,7 @@ func (this *Manager) Stream(snapshot string, parentSnapshot string) (io.ReadClos
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Error(stderr.String())
 
 	return rc, nil
 }

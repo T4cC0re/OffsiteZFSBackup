@@ -1,12 +1,10 @@
 package Discard
 
 import (
-	"fmt"
 	"io"
-	"os"
-
 	"../Common"
 	"github.com/pkg/errors"
+	"github.com/prometheus/common/log"
 )
 
 var E_STUB = errors.New("stub. Not implemented")
@@ -43,6 +41,6 @@ func (this *Manager) Stream(snapshot string, parentSnapshot string) (io.ReadClos
 }
 
 func (this *Manager) Restore(_ string) (io.WriteCloser, error) {
-	fmt.Fprint(os.Stderr, "\n\n\n ---- Discarding downloaded data ---- \n\n\n")
+	log.Warn("---- Discarding downloaded data ----")
 	return DiscardCloser{}, nil
 }

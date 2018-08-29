@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
+	"github.com/prometheus/common/log"
 	"net/http"
 	"net/url"
 	"os"
@@ -20,7 +20,7 @@ import (
 
 	"../Common"
 	"github.com/dustin/go-humanize"
-	"github.com/hashicorp/vault/api"
+	vault "github.com/hashicorp/vault/api"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -400,7 +400,7 @@ func getClient(ctx context.Context, config *oauth2.Config) *http.Client {
 // It returns the retrieved Token.
 func getTokenFromWeb(config *oauth2.Config) *oauth2.Token {
 	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
-	fmt.Printf("Go to the following link in your browser then type the "+
+	fmt.Fprintf(os.Stderr, "Go to the following link in your browser then type the "+
 		"authorization code: \n%v\n", authURL)
 
 	var code string
@@ -433,7 +433,6 @@ func tokenCacheFile() (string, error) {
 // tokenFromFile retrieves a Token from a given file path.
 // It returns the retrieved Token and any read error encountered.
 func tokenFromSecretsCache() (*oauth2.Token, error) {
-	fmt.Println("getting token from secrets cache...")
 	data := secretsCache["offsite-zfs-backup.json"]
 
 	t := &oauth2.Token{}
@@ -460,7 +459,7 @@ func tokenFromFile(file string) (*oauth2.Token, error) {
 // saveToken uses a file path to create a file and store the
 // token in it.
 func saveToken(file string, token *oauth2.Token) {
-	fmt.Printf("Saving credential file to: %s\n", file)
+	fmt.Fprintf(os.Stderr, "Saving credential file to: %s", file)
 	f, err := os.OpenFile(file, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		log.Fatalf("Unable to cache oauth token: %v", err)
@@ -472,33 +471,28 @@ func saveToken(file string, token *oauth2.Token) {
 var srv *drive.Service
 var secretsCache = make(map[string]string, 0)
 
-func fillSecretsCache(client *api.Client) error {
-	fmt.Println("filling secrets cache...")
+func fillSecretsCache(client *vault.Client) error {
 	secret, err := client.Logical().Read("/secret/ozb/googledrive")
 	if err != nil {
 		return err
 	}
 
-	for k,v := range secret.Data {
+	for k, v := range secret.Data {
 		lol, ok := v.(string)
 		if !ok {
 			return errors.New("invalid secret content")
 		}
 		secretsCache[k] = lol
-		fmt.Println(k)
 	}
 
 	if len(secretsCache) != 0 {
-		fmt.Println("filled secrets cache")
 		return nil
 	}
 
-	fmt.Println(secret)
 	return errors.New("invalid secret content (empty)")
 }
 
 func getClientSecretFromVault() ([]byte, error) {
-	fmt.Println("getting client secret from vault...")
 	if len(secretsCache) != 0 {
 		return []byte(secretsCache[".OZB.json"]), nil
 	}
@@ -515,7 +509,7 @@ func getClientSecretFromFile() ([]byte, error) {
 	return b, err
 }
 
-func InitGoogleDrive(client *api.Client) {
+func InitGoogleDrive(client *vault.Client) {
 	ctx := context.Background()
 
 	var b []byte
@@ -523,9 +517,15 @@ func InitGoogleDrive(client *api.Client) {
 	if client != nil {
 		err = fillSecretsCache(client)
 		if err != nil {
-			panic(err)
+			log.Errorf("Could not fill secrets cache from Vault: %v", err)
+			b, err = getClientSecretFromFile() // fallback
+		} else {
+			b, err = getClientSecretFromVault()
+			if err != nil {
+				log.Errorf("Could not get client secret from Vault: %v", err)
+				b, err = getClientSecretFromFile() // fallback
+			}
 		}
-		b, err = getClientSecretFromVault()
 	} else {
 		b, err = getClientSecretFromFile()
 	}
@@ -579,7 +579,7 @@ func createFolder(name string) (string, error) {
 
 func ListFiles(parent string) {
 	files, err := FindInFolder(parent, "", "", func(file *drive.File) {
-		fmt.Fprintln(os.Stderr, file.Properties["OZB_date"])
+		log.Infoln(file.Properties["OZB_date"])
 
 		size, _ := strconv.ParseUint(file.Properties["OZB_storesize"], 10, 64)
 		timestamp, _ := strconv.ParseInt(file.Properties["OZB_date"], 10, 64)
@@ -626,5 +626,5 @@ func DisplayQuota() {
 	} else {
 		limit = humanize.IBytes(q.Limit)
 	}
-	fmt.Fprintf(os.Stderr, "Limit: %s, Used: %s\n", limit, humanize.IBytes(q.Used))
+	log.Infof("Limit: %s, Used: %s", limit, humanize.IBytes(q.Used))
 }

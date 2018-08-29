@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"github.com/prometheus/common/log"
 )
 
 type Downloader struct {
@@ -36,14 +37,14 @@ func NewDownloader(w io.Writer, folder string, filename string, passphrase strin
 
 	parent := GoogleDrive.FindOrCreateFolder(folder)
 
-	fmt.Fprintln(os.Stderr, "Fetching metadata...")
+	log.Infoln("Fetching metadata...")
 	var err error
 	this.metadata, err = GoogleDrive.FetchMetadata(filename, parent)
 	if err != nil {
 		return nil, err
 	}
 
-	fmt.Fprintln(os.Stderr, this.metadata.TotalSizeIn)
+	log.Infoln(this.metadata.TotalSizeIn)
 	if this.metadata.TotalSizeIn == 0 {
 		return nil, E_NO_DATA
 	}
@@ -88,7 +89,7 @@ func (this *Downloader) Download() (*GoogleDrive.Metadata, error) {
 	err := this.close()
 
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		log.Errorln(err)
 	}
 
 	var hmac string
@@ -97,7 +98,9 @@ func (this *Downloader) Download() (*GoogleDrive.Metadata, error) {
 	}
 
 	if this.metadata.HMAC != hmac {
-		fmt.Fprintf(os.Stderr, "Crap. HMAC does not match... :(\nWanted:\t%s\nGot:\t%s\n", this.metadata.HMAC, hmac)
+		log.Errorln("HMAC does not match")
+		log.Errorf("Wanted:\t%s")
+		log.Errorf("Got:\t%s", this.metadata.HMAC, hmac)
 		return this.metadata, E_HMAC_MISMATCH
 	}
 

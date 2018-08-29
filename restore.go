@@ -1,23 +1,25 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"strings"
 
 	"./Abstractions"
 	"./Btrfs"
 	"./Common"
+	"./Discard"
 	"./GoogleDrive"
 	"./ZFS"
-	"./Discard"
 	"github.com/dustin/go-humanize"
+	"github.com/prometheus/common/log"
 )
 
 func chainCommand() {
 	if *subvolume == "" {
-		fmt.Fprintln(os.Stderr, "Must specify --subvolume")
-		os.Exit(1)
+		log.Fatalln("Must specify --subvolume")
+	}
+	if *folder == "" {
+		log.Fatalln("Must specify --folder")
 	}
 
 	var sizeOnDisk uint64 = 0
@@ -29,17 +31,21 @@ func chainCommand() {
 		downloadSize += snap.DownloadSize
 	}
 
-	fmt.Fprintf(os.Stderr, "%s\n\t- %d Snapshots\n\t- Size on Disk: %s\n\t- Size to Download: %s\n", *subvolume, len(chain), humanize.IBytes(sizeOnDisk), humanize.IBytes(downloadSize))
+	log.Infof("Subvolume: %s", *subvolume)
+	log.Infof("Snapshots %d", len(chain))
+	log.Infof("Size on Disk: %s", humanize.IBytes(sizeOnDisk))
+	log.Infof("Size to Download: %s", humanize.IBytes(downloadSize))
 }
 
 func restoreCommand() {
 	if *subvolume == "" {
-		fmt.Fprintln(os.Stderr, "Must specify --subvolume")
-		os.Exit(1)
+		log.Fatalln("Must specify --subvolume")
+	}
+	if *folder == "" {
+		log.Fatalln("Must specify --folder")
 	}
 	if *restoreTarget == "" {
-		fmt.Fprintln(os.Stderr, "Must specify --restoretarget")
-		os.Exit(1)
+		log.Fatalln("Must specify --restoretarget")
 	}
 
 	var manager Common.SnapshotManager
@@ -53,17 +59,17 @@ func restoreCommand() {
 	case "discard":
 		manager = Discard.NewManager(*folder)
 	default:
-		fmt.Fprintln(os.Stderr, "--restore only supports btrfs, discard and zfs.")
+		log.Fatalln("--restore only supports btrfs, discard and zfs.")
 		os.Exit(1)
 	}
 
-	fmt.Fprintln(os.Stderr, manager.ListLocalSnapshots())
+	log.Infoln(manager.ListLocalSnapshots())
 
 	var previous string
 
 	for _, snap := range buildChain(false) {
 		local := manager.IsAvailableLocally(snap.Filename)
-		fmt.Fprintf(os.Stderr, "%s - exists?: %v\n", snap.Filename, local)
+		log.Infof("%s - exists?: %v", snap.Filename, local)
 
 		//if local == true {
 		//	break
@@ -73,7 +79,7 @@ func restoreCommand() {
 		downloader, err := Abstractions.NewDownloader(wp, *folder, snap.Uuid, *passphrase, *tmpdir)
 		if err != nil {
 			if err == Abstractions.E_NO_DATA {
-				fmt.Fprintln(os.Stderr, "Snapshot has no data, skipping...")
+				log.Infoln("Snapshot has no data, skipping...")
 				continue
 			}
 		}
@@ -81,7 +87,7 @@ func restoreCommand() {
 		Common.PrintAndExitOnError(err, 1)
 		wp.Proxified = wc
 		meta, err := downloader.Download()
-		fmt.Fprintln(os.Stderr, meta, err)
+		log.Infoln(meta, err)
 
 		if previous != "" {
 			manager.DeleteSnapshot(previous)
@@ -116,7 +122,10 @@ func buildChain(print bool) []Common.SnapshotWithSize {
 		diskSize := fs.TotalSizeIn
 		snap := Common.SnapshotWithSize{Uuid: latestUuid, Filename: latestName, DownloadSize: downloadSize, DiskSize: diskSize}
 		if print {
-			fmt.Fprintf(os.Stderr, "snapshot:\n\t- UUID: %s\n\t- Name: %s\n\t- Parent: %s\n", latestUuid, latestName, latestParent)
+			log.Infof("snapshot:")
+			log.Infof("UUID: %s", latestUuid)
+			log.Infof("Name: %s", latestName)
+			log.Infof("Parent: %s", latestParent)
 		}
 		chain = append([]Common.SnapshotWithSize{snap}, chain...)
 		if latestParent == "" {

@@ -3,7 +3,7 @@ package main
 import (
 	"./Abstractions"
 	"./Common"
-	"fmt"
+	"github.com/prometheus/common/log"
 	"os"
 )
 
@@ -11,5 +11,5 @@ func downloadCommand() {
 	uploader, err := Abstractions.NewDownloader(os.Stdout, *folder, *download, *passphrase, *tmpdir)
 	Common.PrintAndExitOnError(err, 1)
 	meta, err := uploader.Download()
-	fmt.Fprintln(os.Stderr, meta, err)
+	log.Infoln(meta, err)
 }

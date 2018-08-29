@@ -15,6 +15,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"github.com/prometheus/common/log"
 )
 
 type Uploader struct {
@@ -100,7 +101,7 @@ func (this *Uploader) close() (error, error) {
 }
 
 func (this *Uploader) Upload() (*GoogleDrive.Metadata, error) {
-	fmt.Fprintf(os.Stderr, "Uploading as '%s'\n", this.inputMeta.Uuid)
+	log.Infof("Uploading as '%s'", this.inputMeta.Uuid)
 
 	// Here the actual reading and upload begins
 	_, err := io.Copy(this.multiWriter, this.readProxy)
@@ -110,10 +111,10 @@ func (this *Uploader) Upload() (*GoogleDrive.Metadata, error) {
 
 	err, err2 := this.close()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		log.Errorln( err)
 	}
 	if err2 != nil {
-		fmt.Fprintln(os.Stderr, err2)
+		log.Errorln( err2)
 	}
 
 	var authHMAC string
@@ -157,12 +158,12 @@ func (this *Uploader) Upload() (*GoogleDrive.Metadata, error) {
 	)
 
 	for {
-		fmt.Fprint(os.Stderr, "\033[2KUploading metadata...\r")
+		log.Info("Uploading metadata...")
 		if GoogleDrive.UploadMetadata(meta, this.parent) != nil {
-			fmt.Fprint(os.Stderr, "\033[2KMetadata uploaded\n")
+			log.Info("Metadata uploaded")
 			break
 		}
-		fmt.Fprint(os.Stderr, "\033[2KFailed to upload metadata. Retrying...\r")
+		log.Warn(os.Stderr, "Failed to upload metadata. Retrying...")
 		time.Sleep(5 * time.Second)
 	}
 

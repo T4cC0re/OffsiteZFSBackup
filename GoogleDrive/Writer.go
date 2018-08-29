@@ -11,6 +11,8 @@ import (
 	"io/ioutil"
 	"os"
 	"time"
+	"github.com/prometheus/common/log"
+
 )
 
 const WRITE_CACHE_FILENAME = "OZBWriteCache"
@@ -40,7 +42,7 @@ func NewGoogleDriveWriter(meta *MetadataBase, parentID string, cacheSize int, tm
 		stat, err := os.Stat("/dev/shm")
 		if err == nil && stat.IsDir() {
 			tmpBase = "/dev/shm"
-			fmt.Fprintln(os.Stderr, "Using shared memory as cache...")
+			log.Infoln( "Using shared memory as cache...")
 		}
 	}
 
@@ -79,7 +81,7 @@ func (this *Writer) upload() error {
 
 	chunkInfo := &ChunkInfo{Uuid: this.meta.Uuid, Encryption: this.meta.Encryption, Authentication: this.meta.Authentication, IsData: true, FileName: this.meta.FileName, Chunk: this.Chunk}
 	for {
-		fmt.Fprintf(os.Stderr, "\033[2KUploading chunk %d for a total of %s...\r", this.Chunk, humanize.IBytes(uint64(this.Total)+uint64(this.written)))
+		log.Infof("Uploading chunk %d for a total of %s...", this.Chunk, humanize.IBytes(uint64(this.Total)+uint64(this.written)))
 		_, err = this.cache.Seek(0, 0)
 		if err != nil {
 			return err
@@ -87,14 +89,14 @@ func (this *Writer) upload() error {
 
 		driveFile, err := Upload(chunkInfo, this.parentID, this.cache, fileHash)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "\033[2KUpload of chunk %d failed for a total of %s Retrying...\r", this.Chunk, humanize.IBytes(uint64(this.Total)+uint64(this.written)))
+			log.Errorf("Upload of chunk %d failed for a total of %s Retrying...", this.Chunk, humanize.IBytes(uint64(this.Total)+uint64(this.written)))
 			time.Sleep(5 * time.Second)
 			continue
 		}
 
 		this.Total += uint64(this.written)
 		this.written = 0
-		fmt.Fprintf(os.Stderr, "\033[2KUploaded chunk %d for a total of %s. ID: %s\n", this.Chunk, humanize.IBytes(uint64(this.Total)), driveFile.Id)
+		log.Infof("Uploaded chunk %d for a total of %s. ID: %s", this.Chunk, humanize.IBytes(uint64(this.Total)), driveFile.Id)
 		this.Chunk++
 		break
 	}
@@ -141,7 +143,7 @@ func (this *Writer) Write(p []byte) (int, error) {
 	}
 
 	if this.written == 0 {
-		fmt.Fprintf(os.Stderr, "\033[2KWriting into chunk %d...\r", this.Chunk)
+		log.Infof("Writing into chunk %d...", this.Chunk)
 	}
 
 	buff := make([]byte, len(p))

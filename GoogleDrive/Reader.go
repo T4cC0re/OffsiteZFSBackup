@@ -2,7 +2,6 @@ package GoogleDrive
 
 import (
 	"errors"
-	"fmt"
 	"github.com/dustin/go-humanize"
 	"golang.org/x/net/context"
 	"google.golang.org/api/drive/v3"
@@ -11,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"time"
+	"github.com/prometheus/common/log"
 )
 
 const READ_CACHE_FILENAME = "OZBReadCache"
@@ -39,7 +39,7 @@ func NewGoogleDriveReader(meta *Metadata, tmpBase string) (*Reader, error) {
 		stat, err := os.Stat("/dev/shm")
 		if err == nil && stat.IsDir() {
 			tmpBase = "/dev/shm"
-			fmt.Fprintln(os.Stderr, "Using shared memory as cache...")
+			log.Infoln( "Using shared memory as cache...")
 		}
 	}
 
@@ -87,7 +87,7 @@ func NewGoogleDriveReader(meta *Metadata, tmpBase string) (*Reader, error) {
 	}
 
 	reader.download(0)
-	fmt.Fprintf(os.Stderr, "\033[2KReading from chunk %d...\r", 0)
+	log.Infof("Reading from chunk %d...", 0)
 
 	return reader, nil
 }
@@ -111,16 +111,16 @@ func (this *Reader) gatherChunkInfo(fileList *drive.FileList) error {
 
 func (this *Reader) download(chunk uint) error {
 	for {
-		fmt.Fprintf(os.Stderr, "\033[2KDownloading chunk %d...\r", chunk)
+		log.Infof( "Downloading chunk %d...", chunk)
 		size, err := Download(this.fileIDs[chunk], this.fileMD5s[chunk], this.cache)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "\033[2KDownload of chunk %d failed. %s Retrying...\r", chunk, err.Error())
+			log.Errorf("Download of chunk %d failed. %s Retrying...", chunk, err.Error())
 			time.Sleep(5 * time.Second)
 			continue
 		}
 
 		this.chunkPos = 0
-		fmt.Fprintf(os.Stderr, "\033[2KDownloaded chunk %d (%s)\r", chunk, humanize.IBytes(uint64(size)))
+		log.Infof("Downloaded chunk %d (%s)", chunk, humanize.IBytes(uint64(size)))
 		break
 	}
 
@@ -181,7 +181,7 @@ func (this *Reader) Read(p []byte) (int, error) {
 		}
 		this.chunk++
 
-		fmt.Fprintf(os.Stderr, "\033[2KReading from chunk %d...\r", this.chunk)
+		log.Infof("Reading from chunk %d...", this.chunk)
 
 		if this.chunkSize[this.chunk] < restToRead {
 			restToRead = this.chunkSize[this.chunk]
@@ -227,7 +227,7 @@ func (this *Reader) Close() error {
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "Finished stream after %s\n", humanize.IBytes(uint64(this.Total)))
+	log.Infof("Finished stream after %s", humanize.IBytes(uint64(this.Total)))
 
 	return nil
 }
