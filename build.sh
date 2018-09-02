@@ -34,19 +34,6 @@ set -e
 rm *.deb *.pkg.tar.?z || true
 
 #go build 2>&1 | grep package | cut -d'"' -f2 | xargs go get -u
-### x86_64
-echo "Building x86_64..."
-tmpdir="$(mktemp -d)"
-
-echo "Compiling..."
-compile -o "${tmpdir}/OffsiteZFSBackup"
-echo "Compressing..."
-pack "${tmpdir}/OffsiteZFSBackup"
-chmod +rx ${tmpdir}
-chmod +s "${tmpdir}/OffsiteZFSBackup"
-echo "Building packages..."
-fpm -n offsite-zfs-backup -v $date -s dir -t pacman -a x86_64 -C "${tmpdir}" .=/opt/ozb
-fpm -n offsite-zfs-backup -v $date -s dir -t deb -a x86_64 -C "${tmpdir}" .=/opt/ozb
 
 ### ARM
 echo "Building ARM..."
@@ -64,11 +51,24 @@ fpm -n offsite-zfs-backup -v $date -s dir -t pacman -a armv6l -C "${tmpdir}" .=/
 xz -vd *.pkg.tar.xz
 gzip -v9 *.pkg.tar
 
+### x86_64
+echo "Building x86_64..."
+tmpdir="$(mktemp -d)"
+
+echo "Compiling..."
+compile -o "${tmpdir}/OffsiteZFSBackup"
+echo "Compressing..."
+pack "${tmpdir}/OffsiteZFSBackup"
+chmod +rx ${tmpdir}
+chmod +s "${tmpdir}/OffsiteZFSBackup"
+echo "Building packages..."
+fpm -n offsite-zfs-backup -v $date -s dir -t pacman -a x86_64 -C "${tmpdir}" .=/opt/ozb
+fpm -n offsite-zfs-backup -v $date -s dir -t deb -a x86_64 -C "${tmpdir}" .=/opt/ozb
+
 ### Upload
 echo "Uploading..."
 scp -oProxyJump=jumper *.deb *.pkg.tar.?z blaze.t4cc0.re:/vault/packages
 echo "Cleaning..."
-rm *.deb *.pkg.tar.?z || true
 if [ -n "${tmpdir}" ]; then
   rm -r "${tmpdir}"
 fi
