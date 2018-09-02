@@ -13,11 +13,13 @@ import (
 	"os"
 	"strings"
 	"github.com/prometheus/common/log"
+	"golang.org/x/crypto/hkdf"
 )
 
 var E_INVALID_SNAPSHOT = errors.New("given input is not a valid snapshot")
 
 type SnapshotManager interface {
+	Cleanup(subvolume string, latestSnapshot string) ()
 	CreateSnapshot(subvolume string) (string, error)
 	IsAvailableLocally(snapshot string) bool
 	ListLocalSnapshots() []string
@@ -26,18 +28,10 @@ type SnapshotManager interface {
 	Restore(targetSubvolume string) (io.WriteCloser, error)
 }
 
-func CreateHMAC(hash func() hash.Hash, passphrase string) hash.Hash {
-	mac := hmac.New(hash, []byte(passphrase))
-	return mac
-}
+func checkKeyLength(key []byte) {
+	if len(key) != 32 {
+		log.Fatal("key does not have the correct length. (did you specify --passphrase?)")
 
-func panicIfNoPassphrase(decrypt bool, passphrase string) {
-	if passphrase == "" {
-		if decrypt {
-			log.Fatal("must specify --passphrase for encrypted and/or authenticated backups")
-		} else {
-			log.Fatal("must specify --passphrase for encryption and/or authentication")
-		}
 	}
 }
 
@@ -49,65 +43,72 @@ func PrintAndExitOnError(err error, code int) {
 	os.Exit(code)
 }
 
-func PrepareMACAndEncryption(passphrase string, iv []byte, authentication string, encryption string, decrypt bool) (hash.Hash, cipher.Stream) {
-	passwordHash := sha3.Sum256([]byte(passphrase))
+func DeriveKeys(master []byte, salt []byte) (authentication []byte, encryption []byte) {
+	// Non secret context specific info.
+	info := []byte("OZB HKDF")
 
-	//fmt.Fprintf(
-	//	os.Stderr,
-	//	"DEBUG:\n\t- passhash:\t%x\n\t- IV:\t\t%x\n\t- auth:\t\t%s\n\t- encryption:\t%s\n\t- decrypt:\t%v\n",
-	//	passwordHash,
-	//	iv,
-	//	authentication,
-	//	encryption,
-	//	decrypt,
-	//)
+	derivationFunction := hkdf.New(sha3.New512, master, salt, info)
 
-	var block cipher.Block
-	var err error
-	if encryption != "none" {
-		// Since passwordHash is a 256-bit/32-byte slice, this will set AES-256
-		block, err = aes.NewCipher(passwordHash[:])
-		if err != nil {
-			panic(err)
-		}
+	authentication = make([]byte, 32)
+	encryption = make([]byte, 32)
+
+	n, err := io.ReadFull(derivationFunction, authentication)
+	if n != 32 || err != nil {
+		log.Fatal(err)
 	}
 
+	n, err = io.ReadFull(derivationFunction, encryption)
+	if n != 32 || err != nil {
+		log.Fatal(err)
+	}
+	return
+}
+
+func PrepareMACAndEncryption(authenticationKey []byte, encryptionKey []byte, iv []byte, authentication string, encryption string, decrypt bool) (hash.Hash, cipher.Stream) {
 	var mac hash.Hash
 	switch authentication {
 	case "none":
 		mac = nil
 	case "hmac-sha512":
-		panicIfNoPassphrase(decrypt, passphrase)
-		mac = CreateHMAC(sha512.New, passphrase)
+		checkKeyLength(authenticationKey)
+		mac = hmac.New(sha512.New, authenticationKey)
 	case "hmac-sha256":
-		panicIfNoPassphrase(decrypt, passphrase)
-		mac = CreateHMAC(sha256.New, passphrase)
+		checkKeyLength(authenticationKey)
+		mac = hmac.New(sha256.New, authenticationKey)
 	case "hmac-sha3-512":
-		panicIfNoPassphrase(decrypt, passphrase)
-		mac = CreateHMAC(sha3.New512, passphrase)
+		checkKeyLength(authenticationKey)
+		mac = hmac.New(sha3.New512, authenticationKey)
 	case "hmac-sha3-256":
-		panicIfNoPassphrase(decrypt, passphrase)
-		mac = CreateHMAC(sha3.New256, passphrase)
+		checkKeyLength(authenticationKey)
+		mac = hmac.New(sha3.New256, authenticationKey)
 	default:
 		log.Fatal("unsupported authentication method")
 	}
 
 	var keyStream cipher.Stream
+	var block cipher.Block
+	var err error
+	if encryption != "none" {
+		checkKeyLength(encryptionKey)
+		// Since passwordHash is a 256-bit/32-byte slice, this will set AES-256
+		block, err = aes.NewCipher(encryptionKey)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
 	switch encryption {
 	case "none":
 		keyStream = nil
 	case "aes-ofb":
-		panicIfNoPassphrase(decrypt, passphrase)
 		keyStream = cipher.NewOFB(block, iv)
 	case "aes-cfb":
-		panicIfNoPassphrase(decrypt, passphrase)
 		if decrypt {
 			keyStream = cipher.NewCFBDecrypter(block, iv)
 		} else {
 			keyStream = cipher.NewCFBEncrypter(block, iv)
 		}
 	case "aes-ctr":
-		panicIfNoPassphrase(decrypt, passphrase)
 		keyStream = cipher.NewCTR(block, iv)
 	default:
 		log.Fatal("unsupported encryption method")

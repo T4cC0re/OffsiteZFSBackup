@@ -53,7 +53,7 @@ func NewUploader(r io.ReadCloser, fileType string, subvolume string, folder stri
 	this.iv = make([]byte, aes.BlockSize)
 	n, err := rand.Read(this.iv)
 	if n != aes.BlockSize || err != nil {
-		panic(errors.New("failed to generate IV"))
+		log.Fatal(errors.New("failed to generate IV"))
 	}
 
 	encryptionL := strings.ToLower(encryption)
@@ -63,10 +63,12 @@ func NewUploader(r io.ReadCloser, fileType string, subvolume string, folder stri
 
 	this.uploader, err = GoogleDrive.NewGoogleDriveWriter(this.inputMeta, this.parent, chunksize*1024*1024, tmpdir)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
-	this.mac, this.keyStream = Common.PrepareMACAndEncryption(passphrase, this.iv, this.inputMeta.Authentication, this.inputMeta.Encryption, false)
+	authenticationKey, encryptionKey := Common.DeriveKeys([]byte(passphrase), this.iv)
+
+	this.mac, this.keyStream = Common.PrepareMACAndEncryption(authenticationKey, encryptionKey, this.iv, this.inputMeta.Authentication, this.inputMeta.Encryption, false)
 	if this.mac != nil {
 		writers = append(writers, this.mac)
 	}

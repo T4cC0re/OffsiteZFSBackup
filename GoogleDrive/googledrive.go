@@ -66,6 +66,83 @@ type ChunkInfo struct {
 	Chunk          uint
 }
 
+func Cleanup(folderId string, subvolume string) () {
+	log.Infof("Google Drive Cleanup...")
+	log.Info("Builing restore chain...")
+	chain := BuildChain(folderId, subvolume, false)
+
+	log.Info("Retrieving list of files...")
+	files, err := srv.Files.
+		List().
+		Fields("nextPageToken, files(id, properties)").
+		Q("'" + folderId + "' in parents AND trashed = false").
+		Do()
+	if err != nil {
+		log.Error(err)
+	}
+	log.Infof("Retrieving %d files", len(files.Files))
+
+	log.Info("Deleting files...")
+driveFiles:
+	for _, file := range files.Files {
+		log.Info(file.Properties["OZB_uuid"], file.Id)
+		if file.Properties["OZB_uuid"] == "" || file.Id == "" {
+			continue driveFiles // Failsafe
+		}
+		for _, snap := range chain {
+			if snap.Uuid == file.Properties["OZB_uuid"] {
+				continue driveFiles
+			}
+		}
+		log.Infof("Deleting %s", file.Id)
+		err := srv.Files.Delete(file.Id).Do()
+		if err != nil {
+			log.Error(err)
+		}
+	}
+
+	log.Infof("Google Drive Cleanup done!")
+}
+
+func BuildChain(folderId string, subvolume string, print bool) []Common.SnapshotWithSize {
+	latestUploaded, err := FindLatest(folderId, subvolume)
+	Common.PrintAndExitOnError(err, 1)
+
+	if latestUploaded == nil {
+		return []Common.SnapshotWithSize{}
+	}
+
+	latestUuid := latestUploaded.Properties["OZB_uuid"]
+	latestName := latestUploaded.Properties["OZB_filename"]
+
+	var chain []Common.SnapshotWithSize
+
+	for true {
+		fs, err := FetchMetadata(latestUuid, folderId)
+		if err != nil {
+			log.Fatal(err)
+		}
+		latestUuid = fs.Uuid
+		latestName = fs.FileName
+		latestParent := fs.Parent
+		downloadSize := fs.TotalSize
+		diskSize := fs.TotalSizeIn
+		snap := Common.SnapshotWithSize{Uuid: latestUuid, Filename: latestName, DownloadSize: downloadSize, DiskSize: diskSize}
+		if print {
+			log.Infof("snapshot: %s", latestName)
+		}
+		chain = append([]Common.SnapshotWithSize{snap}, chain...)
+		if latestParent == "" {
+			break
+		}
+
+		// fetch parent on next iteration
+		latestUuid = latestParent
+	}
+
+	return chain
+}
+
 func FetchMetadata(uuid string, parent string) (*Metadata, error) {
 	var query = "trashed = false AND properties has { key='OZB_type' and value='metadata' } AND properties has { key='OZB_uuid' and value='" + uuid + "' }"
 	if parent != "" {
@@ -383,7 +460,7 @@ func getClient(ctx context.Context, config *oauth2.Config) *http.Client {
 	if len(secretsCache) != 0 {
 		tok, err = tokenFromSecretsCache()
 		if err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 	} else {
 		tok, err = tokenFromFile(cacheFile)
@@ -597,7 +674,7 @@ func ListFiles(parent string) {
 		)
 	})
 	if err != nil || files == nil {
-		panic(err)
+		log.Fatal(err)
 	}
 }
 
@@ -607,7 +684,7 @@ func FindOrCreateFolder(name string) string {
 		if err == E_NOPARENT {
 			parent, err = createFolder(name)
 			if err != nil {
-				panic(err)
+				log.Fatal(err)
 			}
 		}
 	}
@@ -617,7 +694,7 @@ func FindOrCreateFolder(name string) string {
 func DisplayQuota() {
 	q, err := getQuota()
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 	var limit string

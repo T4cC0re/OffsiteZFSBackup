@@ -25,6 +25,31 @@ func NewManager(folder string) *Manager {
 	return this
 }
 
+func  (this *Manager) Cleanup(subvolume string, latestSnapshot string) () {
+	log.Infof("ZFS Cleanup...")
+	snapshotsToDelete := []string{}
+	log.Infof(subvolume)
+
+	snapshotPattern := fmt.Sprintf("%s@", subvolume)
+
+	snaps := this.ListLocalSnapshots()
+
+	for _, snap := range snaps {
+		if snap == latestSnapshot {
+			// NEVER delete the latest snapshots, because the would not allow for incremental backups
+			continue
+		}
+		if strings.Contains(snap, snapshotPattern) {
+			snapshotsToDelete = append(snapshotsToDelete, snap)
+		}
+	}
+
+	log.Infof("Deleting snapshots: %+v", snapshotsToDelete)
+	for _, snap := range snapshotsToDelete {
+		this.DeleteSnapshot(snap)
+	}
+}
+
 func (this *Manager) ListLocalSnapshots() []string {
 	cmd := exec.Command("zfs", "list", "-Ht", "snapshot")
 
@@ -87,11 +112,21 @@ func (this *Manager) DeleteSnapshot(snapshot string) (bool, error) {
 	if !strings.Contains(snapshot, "@") {
 		return false, Common.E_INVALID_SNAPSHOT
 	}
-	cmd := exec.Command("zfs", "destroy", "-d", snapshot)
+
+	cmd := exec.Command("zfs", "release", "-r", "keep", snapshot)
 
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	err := cmd.Run()
+	if err != nil {
+		return false, err
+	}
+
+	cmd = exec.Command("zfs", "destroy", snapshot)
+
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err = cmd.Run()
 	if err != nil {
 		return false, err
 	}
@@ -121,7 +156,7 @@ func (this *Manager) Stream(snapshot string, parentSnapshot string) (io.ReadClos
 }
 
 func (this *Manager) Restore(targetSubvolume string) (io.WriteCloser, error) {
-	command := exec.Command("zfs", "receive", targetSubvolume)
+	command := exec.Command("zfs", "receive", "-F", targetSubvolume)
 
 	wc, err := command.StdinPipe()
 	command.Stderr = os.Stderr

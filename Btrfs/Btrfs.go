@@ -37,6 +37,32 @@ func NewManager(folder string) *Manager {
 	return this
 }
 
+func (this *Manager) Cleanup(subvolume string, latestSnapshot string) () {
+	log.Infof("btrfs Cleanup...")
+	snapshotsToDelete := []string{}
+	volume := strconv.FormatUint(uint64(crc32.ChecksumIEEE([]byte(subvolume))), 16)
+	log.Infof(volume, subvolume)
+
+	snapshotPattern := fmt.Sprintf("%s/%s@", snapshotdir, volume)
+
+	snaps := this.ListLocalSnapshots()
+
+	for _, snap := range snaps {
+		if snap == latestSnapshot {
+			// NEVER delete the latest snapshots, because the would not allow for incremental backups
+			continue
+		}
+		if strings.Contains(snap, snapshotPattern) {
+			snapshotsToDelete = append(snapshotsToDelete, snap)
+		}
+	}
+
+	log.Infof("Deleting snapshots: %+v", snapshotsToDelete)
+	for _, snap := range snapshotsToDelete {
+		this.DeleteSnapshot(snap)
+	}
+}
+
 func (this *Manager) ListLocalSnapshots() []string {
 	cmd := exec.Command("btrfs", "subvolume", "list", "-ros", snapshotdir)
 	var out bytes.Buffer
@@ -107,7 +133,7 @@ func (this *Manager) CreateSnapshot(subvolume string) (string, error) {
 		return "", err
 	}
 	log.Info(strings.Trim(out.String(), "\n\r"))
-	log.Error(stderr.String())
+	log.Error(strings.Trim(stderr.String(), "\n\r"))
 
 	return snapshotname, nil
 }

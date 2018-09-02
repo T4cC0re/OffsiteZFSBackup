@@ -20,6 +20,11 @@ func NewManager(folder string) *Manager {
 	return this
 }
 
+func (this *Manager) Cleanup(subvolume string, latestSnapshot string) () {
+	log.Infof("noop cleanup...")
+	return
+}
+
 func (this *Manager) ListLocalSnapshots() []string {
 	return []string{}
 }

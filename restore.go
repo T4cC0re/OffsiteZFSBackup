@@ -8,8 +8,8 @@ import (
 	"./Btrfs"
 	"./Common"
 	"./Discard"
-	"./GoogleDrive"
 	"./ZFS"
+	"./GoogleDrive"
 	"github.com/dustin/go-humanize"
 	"github.com/prometheus/common/log"
 )
@@ -22,17 +22,24 @@ func chainCommand() {
 		log.Fatalln("Must specify --folder")
 	}
 
+	folderId := GoogleDrive.FindOrCreateFolder(*folder)
+	chain := GoogleDrive.BuildChain(folderId, *subvolume, true)
+	printInfo(&chain)
+}
+
+func printInfo (chain *[]Common.SnapshotWithSize) {
+	if chain == nil {
+		return
+	}
 	var sizeOnDisk uint64 = 0
 	var downloadSize uint64 = 0
-
-	chain := buildChain(false)
-	for _, snap := range chain {
+	for _, snap := range *chain {
 		sizeOnDisk += snap.DiskSize
 		downloadSize += snap.DownloadSize
 	}
 
 	log.Infof("Subvolume: %s", *subvolume)
-	log.Infof("Snapshots %d", len(chain))
+	log.Infof("Snapshots %d", len(*chain))
 	log.Infof("Size on Disk: %s", humanize.IBytes(sizeOnDisk))
 	log.Infof("Size to Download: %s", humanize.IBytes(downloadSize))
 }
@@ -67,14 +74,13 @@ func restoreCommand() {
 
 	var previous string
 
-	for _, snap := range buildChain(false) {
-		local := manager.IsAvailableLocally(snap.Filename)
-		log.Infof("%s - exists?: %v", snap.Filename, local)
+	log.Info("Building restore chain. This might take a while...")
+	folderId := GoogleDrive.FindOrCreateFolder(*folder)
+	restoreChain := GoogleDrive.BuildChain(folderId, *subvolume, true)
+	printInfo(&restoreChain)
+	log.Info("starting restore...")
 
-		//if local == true {
-		//	break
-		//}
-
+	for _, snap := range restoreChain {
 		wp := &Abstractions.WriteProxy{}
 		downloader, err := Abstractions.NewDownloader(wp, *folder, snap.Uuid, *passphrase, *tmpdir)
 		if err != nil {
@@ -87,6 +93,9 @@ func restoreCommand() {
 		Common.PrintAndExitOnError(err, 1)
 		wp.Proxified = wc
 		meta, err := downloader.Download()
+		if err != nil {
+			log.Fatalf("Restore failed. Error while downloading snapshot: %+v", err)
+		}
 		log.Infoln(meta, err)
 
 		if previous != "" {
@@ -94,47 +103,4 @@ func restoreCommand() {
 		}
 		previous = snap.Filename
 	}
-}
-
-func buildChain(print bool) []Common.SnapshotWithSize {
-	folderId := GoogleDrive.FindOrCreateFolder(*folder)
-	latestUploaded, err := GoogleDrive.FindLatest(folderId, *subvolume)
-	Common.PrintAndExitOnError(err, 1)
-
-	if latestUploaded == nil {
-		return []Common.SnapshotWithSize{}
-	}
-
-	latestUuid := latestUploaded.Properties["OZB_uuid"]
-	latestName := latestUploaded.Properties["OZB_filename"]
-
-	var chain []Common.SnapshotWithSize
-
-	for true {
-		fs, err := GoogleDrive.FetchMetadata(latestUuid, folderId)
-		if err != nil {
-			panic(err)
-		}
-		latestUuid = fs.Uuid
-		latestName = fs.FileName
-		latestParent := fs.Parent
-		downloadSize := fs.TotalSize
-		diskSize := fs.TotalSizeIn
-		snap := Common.SnapshotWithSize{Uuid: latestUuid, Filename: latestName, DownloadSize: downloadSize, DiskSize: diskSize}
-		if print {
-			log.Infof("snapshot:")
-			log.Infof("UUID: %s", latestUuid)
-			log.Infof("Name: %s", latestName)
-			log.Infof("Parent: %s", latestParent)
-		}
-		chain = append([]Common.SnapshotWithSize{snap}, chain...)
-		if latestParent == "" {
-			break
-		}
-
-		// fetch parent on next iteration
-		latestUuid = latestParent
-	}
-
-	return chain
 }

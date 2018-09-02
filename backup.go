@@ -8,6 +8,7 @@ import (
 	"./ZFS"
 	"github.com/prometheus/common/log"
 	"strings"
+	"google.golang.org/api/drive/v3"
 )
 
 func backupCommand() {
@@ -30,48 +31,58 @@ func backupCommand() {
 		log.Fatalln("--backup only supports btrfs and zfs.")
 	}
 
-	latestUploaded, err := GoogleDrive.FindLatest(GoogleDrive.FindOrCreateFolder(*folder), *subvolume)
+	folderId := GoogleDrive.FindOrCreateFolder(*folder)
 
-	manager.ListLocalSnapshots()
-	snap, err := manager.CreateSnapshot(*subvolume)
+	var latestUploaded *drive.File
+	var err error
+	if !*full {
+		latestUploaded, err = GoogleDrive.FindLatest(folderId, *subvolume)
+		log.Error(err)
+	}
+
+	var parentSnapshotUuid string
+	var parentSnapshotName string
+	if latestUploaded != nil {
+		if !manager.IsAvailableLocally(latestUploaded.Properties["OZB_filename"]) {
+			log.Fatalf("Latest uploaded snapshot '%s' is not available locally! Backup with --full to create a new full backup.", latestUploaded.Properties["OZB_filename"])
+		}
+		parentSnapshotUuid = latestUploaded.Properties["OZB_uuid"]
+		parentSnapshotName = latestUploaded.Properties["OZB_filename"]
+	} else {
+		log.Infof("Doing full backup, as no uploaded snapshot was found or --full was specified.")
+	}
+	if *cleanup {
+		log.Infof("Will clean up after backup...")
+	}
+
+	currentSnapshot, err := manager.CreateSnapshot(*subvolume)
 	if err != nil {
 		log.Fatalln("Failed to create snapshot", err.Error())
 	}
 
-	var parentUuid string
-	var parentName string
-	if latestUploaded != nil {
-		parentUuid = latestUploaded.Properties["OZB_uuid"]
-		parentName = latestUploaded.Properties["OZB_filename"]
-	}
 	log.Infof("Latest uploaded snapshot:")
-	log.Infof("UUID: %s", parentUuid)
-	log.Infof("Name: %s", parentName)
+	log.Infof("UUID: %s", parentSnapshotUuid)
+	log.Infof("Name: %s", parentSnapshotName)
 
 	/// No Wait necessary, as command will EOF which will finish the upload
-	rc, err := manager.Stream(snap, parentName)
+	rc, err := manager.Stream(currentSnapshot, parentSnapshotName)
 	Common.PrintAndExitOnError(err, 1)
 
-	uploader := Abstractions.NewUploader(rc, backupType, *subvolume, *folder, snap, *passphrase, *encryption, *authentication, *chunksize, *tmpdir)
+	uploader := Abstractions.NewUploader(rc, backupType, *subvolume, *folder, currentSnapshot, *passphrase, *encryption, *authentication, *chunksize, *tmpdir)
 	if latestUploaded != nil {
-		uploader.Parent = parentUuid
+		uploader.Parent = parentSnapshotUuid
 	}
 	meta, err := uploader.Upload()
 	Common.PrintAndExitOnError(err, 1)
 
-	fileId, err := GoogleDrive.SaveLatest(snap, meta.Uuid, *subvolume, *folder)
+	fileId, err := GoogleDrive.SaveLatest(currentSnapshot, meta.Uuid, *subvolume, *folder)
 	Common.PrintAndExitOnError(err, 1)
 
 	log.Infof("FileID of state: %s", fileId)
 
-	if parentName != "" {
-		_, err = manager.DeleteSnapshot(parentName)
-		if err != nil {
-			log.Errorf("An error occured while deleting parent snapshot: '%s'", err.Error())
-		} else {
-			log.Infoln("Succesfully deleted previously parent!")
-		}
-	} else {
-		log.Infoln("no parent to delete")
+	if *cleanup {
+		log.Infof("Cleaning up...")
+		manager.Cleanup(*subvolume, currentSnapshot)
+		GoogleDrive.Cleanup(folderId, *subvolume)
 	}
 }

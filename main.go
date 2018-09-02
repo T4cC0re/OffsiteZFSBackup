@@ -32,6 +32,8 @@ var (
 	vault          = flag.String("vault", "", "Vault URL to connect to (overrules 'VAULT_ADDR')")
 	vaultToken     = flag.String("vaulttoken", "", "Vault token to fetch Google Drive secrets with (overrules 'VAULT_TOKEN')")
 	tmpdir         = flag.String("tmpdir", "", "Temporary folder. Default if empty: /dev/shm (in-memory) or os.TempDir if unavailable")
+	full           = flag.Bool("full", false, "Force a full backup instead of doing an incemental one")
+	cleanup        = flag.Bool("cleanup", false, "Remove unneeded snapshots and delete inaddressable files from Google Drive at the end. If specified without --backup only Google Drive will be cleaned up")
 )
 
 func main() {
@@ -111,6 +113,17 @@ func main() {
 		fmt.Println(snapshot, err)
 	case *quota:
 		// NOOP
+	case *cleanup:
+		// Cleanup without a backup.
+
+		if *subvolume == "" {
+			log.Fatalln("Must specify --subvolume")
+		}
+		if *folder == "" {
+			log.Fatalln("Must specify --folder")
+		}
+		parent := GoogleDrive.FindOrCreateFolder(*folder)
+		GoogleDrive.Cleanup(parent, *subvolume)
 	default:
 		log.Fatalln("Please select an option")
 	}

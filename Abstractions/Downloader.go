@@ -44,7 +44,6 @@ func NewDownloader(w io.Writer, folder string, filename string, passphrase strin
 		return nil, err
 	}
 
-	log.Infoln(this.metadata.TotalSizeIn)
 	if this.metadata.TotalSizeIn == 0 {
 		return nil, E_NO_DATA
 	}
@@ -52,11 +51,13 @@ func NewDownloader(w io.Writer, folder string, filename string, passphrase strin
 	var read io.Reader
 
 	iv, _ := hex.DecodeString(this.metadata.IV)
-	this.mac, this.keyStream = Common.PrepareMACAndEncryption(passphrase, iv, this.metadata.Authentication, this.metadata.Encryption, true)
+	authenticationKey, encryptionKey := Common.DeriveKeys([]byte(passphrase), iv)
+
+	this.mac, this.keyStream = Common.PrepareMACAndEncryption(authenticationKey, encryptionKey, iv, this.metadata.Authentication, this.metadata.Encryption, true)
 
 	this.downloader, err = GoogleDrive.NewGoogleDriveReader(this.metadata, tmpdir)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 	if this.keyStream != nil {
@@ -83,6 +84,9 @@ func (this *Downloader) close() error {
 
 func (this *Downloader) Download() (*GoogleDrive.Metadata, error) {
 	if _, err := io.Copy(this.multiWriter, this.zr); err != nil {
+		if err == lz4.ErrInvalid {
+			return nil, errors.New("lz4 data cannot be decompressed. The file has been tampered with or the encryption-key is incorrect")
+		}
 		return nil, err
 	}
 
