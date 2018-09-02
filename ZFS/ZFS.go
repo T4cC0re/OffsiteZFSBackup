@@ -39,7 +39,7 @@ func  (this *Manager) Cleanup(subvolume string, latestSnapshot string) () {
 			// NEVER delete the latest snapshots, because the would not allow for incremental backups
 			continue
 		}
-		if strings.Contains(snap, snapshotPattern) {
+		if strings.HasPrefix(snap, snapshotPattern) {
 			snapshotsToDelete = append(snapshotsToDelete, snap)
 		}
 	}
