@@ -2,6 +2,8 @@ package GoogleDrive
 
 import (
 	"crypto/md5"
+	"gitlab.com/T4cC0re/OffsiteZFSBackup/Common"
+
 	//"encoding/json"
 	"errors"
 	"fmt"
@@ -11,7 +13,7 @@ import (
 	"io/ioutil"
 	"os"
 	"time"
-	"github.com/prometheus/common/log"
+	log "github.com/sirupsen/logrus"
 
 )
 
@@ -29,15 +31,16 @@ type Writer struct {
 	written      int
 	Total        uint64
 	cacheSize    int
-	Chunk        uint
+	Chunk        uint64
 	fileNameBase string
-	parentID     string
 	closed       bool
-	meta         *MetadataBase
+	meta         *Common.MetadataBase
 	hash         hash.Hash
+	drive		 *GoogleDrive
+	path		string
 }
 
-func NewGoogleDriveWriter(meta *MetadataBase, parentID string, cacheSize int, tmpBase string) (*Writer, error) {
+func NewGoogleDriveWriter(drive *GoogleDrive, meta *Common.MetadataBase, path string, cacheSize int, tmpBase string) (*Writer, error) {
 	if tmpBase == "" {
 		stat, err := os.Stat("/dev/shm")
 		if err == nil && stat.IsDir() {
@@ -66,7 +69,7 @@ func NewGoogleDriveWriter(meta *MetadataBase, parentID string, cacheSize int, tm
 		return nil, err
 	}
 
-	writer := &Writer{cache: cache, written: 0, Chunk: 0, parentID: parentID, cacheSize: cacheSize, closed: false, meta: meta, hash: md5.New()}
+	writer := &Writer{drive: drive, cache: cache, written: 0, Chunk: 0, path: path, cacheSize: cacheSize, closed: false, meta: meta, hash: md5.New()}
 
 	return writer, nil
 }
@@ -79,7 +82,7 @@ func (this *Writer) upload() error {
 
 	fileHash := fmt.Sprintf("%x", this.hash.Sum(nil))
 
-	chunkInfo := &ChunkInfo{Uuid: this.meta.Uuid, Encryption: this.meta.Encryption, Authentication: this.meta.Authentication, IsData: true, FileName: this.meta.FileName, Chunk: this.Chunk}
+	chunkInfo := &Common.ChunkInfo{Uuid: this.meta.Uuid, Encryption: this.meta.Encryption, Authentication: this.meta.Authentication, IsData: true, FileName: this.meta.FileName, Chunk: this.Chunk}
 	for {
 		log.Infof("Uploading chunk %d for a total of %s...", this.Chunk, humanize.IBytes(uint64(this.Total)+uint64(this.written)))
 		_, err = this.cache.Seek(0, 0)
@@ -87,7 +90,7 @@ func (this *Writer) upload() error {
 			return err
 		}
 
-		driveFile, err := Upload(chunkInfo, this.parentID, this.cache, fileHash)
+		driveFile, err := this.drive.Upload(chunkInfo, this.path, this.cache, fileHash)
 		if err != nil {
 			log.Errorf("Upload of chunk %d failed for a total of %s Retrying...", this.Chunk, humanize.IBytes(uint64(this.Total)+uint64(this.written)))
 			time.Sleep(5 * time.Second)

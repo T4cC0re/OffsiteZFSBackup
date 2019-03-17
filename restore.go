@@ -4,17 +4,29 @@ import (
 	"os"
 	"strings"
 
-	"./Abstractions"
-	"./Btrfs"
-	"./Common"
-	"./Discard"
-	"./ZFS"
-	"./GoogleDrive"
+	"gitlab.com/T4cC0re/OffsiteZFSBackup/Abstractions"
+	"gitlab.com/T4cC0re/OffsiteZFSBackup/Btrfs"
+	"gitlab.com/T4cC0re/OffsiteZFSBackup/Common"
+	"gitlab.com/T4cC0re/OffsiteZFSBackup/Discard"
+	"gitlab.com/T4cC0re/OffsiteZFSBackup/ZFS"
+	"gitlab.com/T4cC0re/OffsiteZFSBackup/Backend/GoogleDrive"
 	"github.com/dustin/go-humanize"
 	"github.com/prometheus/common/log"
 )
 
 func chainCommand() {
+
+	//TODO: NEW HACK FOR NOW!
+	var drive GoogleDrive.GoogleDrive
+	var isDrive bool
+	if drive, isDrive = backend.(GoogleDrive.GoogleDrive); isDrive {
+		log.Infoln("Detected GoogleDrive")
+	} else {
+		log.Fatalln("NO GDrive")
+	}
+	// END HACK
+
+
 	if *subvolume == "" {
 		log.Fatalln("Must specify --subvolume")
 	}
@@ -22,8 +34,7 @@ func chainCommand() {
 		log.Fatalln("Must specify --folder")
 	}
 
-	folderId := GoogleDrive.FindOrCreateFolder(*folder)
-	chain := GoogleDrive.BuildChain(folderId, *subvolume, true)
+	chain := drive.BuildChain(*folder, *subvolume, true)
 	printInfo(&chain)
 }
 
@@ -45,6 +56,16 @@ func printInfo (chain *[]Common.SnapshotWithSize) {
 }
 
 func restoreCommand() {
+
+	//TODO: NEW HACK FOR NOW!
+	var drive GoogleDrive.GoogleDrive
+	var isDrive bool
+	if drive, isDrive = backend.(GoogleDrive.GoogleDrive); isDrive {
+		log.Infoln("Detected GoogleDrive")
+	} else {
+		log.Fatalln("NO GDrive")
+	}
+	// END HACK
 	if *subvolume == "" {
 		log.Fatalln("Must specify --subvolume")
 	}
@@ -60,9 +81,9 @@ func restoreCommand() {
 	restoreType := strings.ToLower(*restore)
 	switch restoreType {
 	case "btrfs":
-		manager = Btrfs.NewManager(*folder)
+		manager = Btrfs.NewManager(*folder, &backend)
 	case "zfs":
-		manager = ZFS.NewManager(*folder)
+		manager = ZFS.NewManager(*folder, &backend)
 	case "discard":
 		manager = Discard.NewManager(*folder)
 	default:
@@ -75,14 +96,13 @@ func restoreCommand() {
 	var previous string
 
 	log.Info("Building restore chain. This might take a while...")
-	folderId := GoogleDrive.FindOrCreateFolder(*folder)
-	restoreChain := GoogleDrive.BuildChain(folderId, *subvolume, true)
+	restoreChain := drive.BuildChain(*folder, *subvolume, true)
 	printInfo(&restoreChain)
 	log.Info("starting restore...")
 
 	for _, snap := range restoreChain {
 		wp := &Abstractions.WriteProxy{}
-		downloader, err := Abstractions.NewDownloader(wp, *folder, snap.Uuid, *passphrase, *tmpdir)
+		downloader, err := Abstractions.NewDownloader(&backend, wp, *folder, snap.Uuid, *passphrase, *tmpdir)
 		if err != nil {
 			if err == Abstractions.E_NO_DATA {
 				log.Infoln("Snapshot has no data, skipping...")

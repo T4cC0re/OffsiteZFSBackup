@@ -1,8 +1,6 @@
 package Abstractions
 
 import (
-	"../Common"
-	"../GoogleDrive"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -10,16 +8,19 @@ import (
 	"fmt"
 	"github.com/pierrec/lz4"
 	"github.com/satori/go.uuid"
+	log "github.com/sirupsen/logrus"
+	"gitlab.com/T4cC0re/OffsiteZFSBackup/Backend"
+	"gitlab.com/T4cC0re/OffsiteZFSBackup/Backend/GoogleDrive"
+	"gitlab.com/T4cC0re/OffsiteZFSBackup/Common"
 	"hash"
 	"io"
 	"os"
 	"strings"
 	"time"
-	"github.com/prometheus/common/log"
 )
 
 type Uploader struct {
-	inputMeta   *GoogleDrive.MetadataBase
+	inputMeta   *Common.MetadataBase
 	multiWriter io.Writer
 	readProxy   *ReadProxy
 	compress    *lz4.Writer
@@ -28,14 +29,15 @@ type Uploader struct {
 	uploader    *GoogleDrive.Writer
 	timestamp   int64
 	iv          []byte
-	parent      string
 	fileType    string
 	subvolume   string
 	Parent      string
+	Path        string
+	backend     *Backend.Backend
 }
 
-func NewUploader(r io.ReadCloser, fileType string, subvolume string, folder string, filename string, passphrase string, encryption string, authentication string, chunksize int, tmpdir string) *Uploader {
-	this := &Uploader{}
+func NewUploader(backend *Backend.Backend, r io.ReadCloser, fileType string, subvolume string, folder string, filename string, passphrase string, encryption string, authentication string, chunksize int, tmpdir string, ratio int) *Uploader {
+	this := &Uploader{backend: backend}
 
 	this.fileType = fileType
 	this.subvolume = subvolume
@@ -44,9 +46,20 @@ func NewUploader(r io.ReadCloser, fileType string, subvolume string, folder stri
 
 	var writers []io.Writer
 
-	this.parent = GoogleDrive.FindOrCreateFolder(folder)
+	//TODO: NEW HACK FOR NOW!
+	var drive GoogleDrive.GoogleDrive
+	var isDrive bool
+	b2 := *backend
+	if drive, isDrive = b2.(GoogleDrive.GoogleDrive); isDrive {
+		log.Infoln("Detected GoogleDrive")
+	} else {
+		log.Fatalln("NO GDrive")
+	}
+	// END HACK
 
-	id, _ := uuid.NewV4()
+	this.Path = folder
+
+	id := uuid.NewV4()
 
 	var writeTarget io.Writer
 
@@ -59,9 +72,9 @@ func NewUploader(r io.ReadCloser, fileType string, subvolume string, folder stri
 	encryptionL := strings.ToLower(encryption)
 	authenticationL := strings.ToLower(authentication)
 
-	this.inputMeta = &GoogleDrive.MetadataBase{Uuid: id.String(), FileName: filename, IsData: true, Authentication: authenticationL, Encryption: encryptionL}
+	this.inputMeta = &Common.MetadataBase{Uuid: id.String(), FileName: filename, IsData: true, Authentication: authenticationL, Encryption: encryptionL}
 
-	this.uploader, err = GoogleDrive.NewGoogleDriveWriter(this.inputMeta, this.parent, chunksize*1024*1024, tmpdir)
+	this.uploader, err = GoogleDrive.NewGoogleDriveWriter(&drive, this.inputMeta, this.Path, chunksize*1024*1024, tmpdir)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -80,11 +93,10 @@ func NewUploader(r io.ReadCloser, fileType string, subvolume string, folder stri
 
 	this.compress = lz4.NewWriter(writeTarget)
 	this.compress.Header = lz4.Header{
-		BlockDependency: true,
-		BlockChecksum:   false,
-		NoChecksum:      false,
-		BlockMaxSize:    4 << 20,
-		HighCompression: false,
+		BlockChecksum:    false,
+		NoChecksum:       false,
+		BlockMaxSize:     4 << 20,
+		CompressionLevel: ratio,
 	}
 
 	writers = append(writers, this.compress)
@@ -102,7 +114,7 @@ func (this *Uploader) close() (error, error) {
 	return err, err2
 }
 
-func (this *Uploader) Upload() (*GoogleDrive.Metadata, error) {
+func (this *Uploader) Upload() (*Common.Metadata, error) {
 	log.Infof("Uploading as '%s'", this.inputMeta.Uuid)
 
 	// Here the actual reading and upload begins
@@ -113,10 +125,10 @@ func (this *Uploader) Upload() (*GoogleDrive.Metadata, error) {
 
 	err, err2 := this.close()
 	if err != nil {
-		log.Errorln( err)
+		log.Errorln(err)
 	}
 	if err2 != nil {
-		log.Errorln( err2)
+		log.Errorln(err2)
 	}
 
 	var authHMAC string
@@ -124,7 +136,7 @@ func (this *Uploader) Upload() (*GoogleDrive.Metadata, error) {
 		authHMAC = fmt.Sprintf("%x", this.mac.Sum(nil))
 	}
 
-	meta := &GoogleDrive.Metadata{
+	meta := &Common.Metadata{
 		HMAC:           authHMAC,
 		IV:             fmt.Sprintf("%x", this.iv),
 		FileName:       this.inputMeta.FileName,
@@ -161,7 +173,7 @@ func (this *Uploader) Upload() (*GoogleDrive.Metadata, error) {
 
 	for {
 		log.Info("Uploading metadata...")
-		if GoogleDrive.UploadMetadata(meta, this.parent) != nil {
+		if (*this.backend).UploadMetadata(meta, this.Path) != nil {
 			log.Info("Metadata uploaded")
 			break
 		}

@@ -1,20 +1,21 @@
 package Btrfs
 
 import (
-	"../Common"
-	"../GoogleDrive"
 	"bytes"
 	"fmt"
+	log "github.com/sirupsen/logrus"
+	"gitlab.com/T4cC0re/OffsiteZFSBackup/Backend"
+	"gitlab.com/T4cC0re/OffsiteZFSBackup/Backend/GoogleDrive"
+	"gitlab.com/T4cC0re/OffsiteZFSBackup/Common"
 	"hash/crc32"
 	"io"
-	"github.com/prometheus/common/log"
 	"os"
 	"os/exec"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
-	"path"
 )
 
 /*
@@ -31,9 +32,21 @@ type Manager struct {
 	parent string
 }
 
-func NewManager(folder string) *Manager {
+func NewManager(folder string, backend *Backend.Backend) *Manager {
 	this := &Manager{}
-	this.parent = GoogleDrive.FindOrCreateFolder(folder)
+
+	//TODO: NEW HACK FOR NOW!
+	var drive GoogleDrive.GoogleDrive
+	var isDrive bool
+	b2 := *backend
+	if drive, isDrive = b2.(GoogleDrive.GoogleDrive); isDrive {
+		log.Infoln("Detected GoogleDrive")
+	} else {
+		log.Fatalln("NO GDrive")
+	}
+	// END HACK
+
+	this.parent = drive.FindOrCreateFolder(folder)
 	return this
 }
 
@@ -43,7 +56,7 @@ func (this *Manager) Cleanup(subvolume string, latestSnapshot string) () {
 	volume := strconv.FormatUint(uint64(crc32.ChecksumIEEE([]byte(subvolume))), 16)
 	log.Infof(volume, subvolume)
 
-	snapshotPattern := fmt.Sprintf("%s/%s@", snapshotdir, volume)
+	snapshotPattern := fmt.Sprintf("gitlab.com/T4cC0re/OffsiteZFSBackup/%s@", snapshotdir, volume)
 
 	snaps := this.ListLocalSnapshots()
 
@@ -116,7 +129,7 @@ func ParseBtrfsSnapshot(snapshot string) string {
 
 func (this *Manager) CreateSnapshot(subvolume string) (string, error) {
 	snapshotname := fmt.Sprintf(
-		"%s/%s@%d",
+		"gitlab.com/T4cC0re/OffsiteZFSBackup/%s@%d",
 		snapshotdir,
 		strconv.FormatUint(uint64(crc32.ChecksumIEEE([]byte(subvolume))), 16),
 		time.Now().Unix(),

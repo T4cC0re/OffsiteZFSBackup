@@ -2,9 +2,9 @@ package Discard
 
 import (
 	"io"
-	"../Common"
+	"gitlab.com/T4cC0re/OffsiteZFSBackup/Common"
 	"github.com/pkg/errors"
-	"github.com/prometheus/common/log"
+	log "github.com/sirupsen/logrus"
 )
 
 var E_STUB = errors.New("stub. Not implemented")

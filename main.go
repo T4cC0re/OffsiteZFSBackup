@@ -3,14 +3,17 @@ package main
 import (
 	"encoding/base64"
 	"flag"
+	"gitlab.com/T4cC0re/OffsiteZFSBackup/Backend"
 	"os"
+	"regexp"
 	"runtime"
+	"strings"
 
-	"./GoogleDrive"
 	"fmt"
 	"github.com/hashicorp/vault/api"
 	"github.com/nightlyone/lockfile"
-	"github.com/prometheus/common/log"
+	log "github.com/sirupsen/logrus"
+	"gitlab.com/T4cC0re/OffsiteZFSBackup/Backend/GoogleDrive"
 )
 
 var (
@@ -20,7 +23,7 @@ var (
 	download       = flag.String("download", "", "UUID to download to stdout")
 	authentication = flag.String("authentication", "HMAC-SHA3-512", "Define the authentication to use (NONE, HMAC-SHA[3-]{256,512})")
 	encryption     = flag.String("encryption", "AES-CTR", "Define the encryption to use (NONE, AES-{CTR,OFB,CFB})")
-	folder         = flag.String("folder", "", "Folder on Google Drive to backup to/from")
+	folder         = flag.String("folder", "", "Folder to backup to/from (with prefix)")
 	passphrase     = flag.String("passphrase", "", "Passphrase to use to en-/decrypt and for authentication")
 	quota          = flag.Bool("quota", false, "Define to see Google Drive quota used before continuing")
 	chunksize      = flag.Int("chunksize", 256, "Chunksize for files in MiB. Note: You need this space on disk/RAM during up- & download!")
@@ -34,11 +37,60 @@ var (
 	tmpdir         = flag.String("tmpdir", "", "Temporary folder. Default if empty: /dev/shm (in-memory) or os.TempDir if unavailable")
 	full           = flag.Bool("full", false, "Force a full backup instead of doing an incemental one")
 	cleanup        = flag.Bool("cleanup", false, "Remove unneeded snapshots and delete inaddressable files from Google Drive at the end. If specified without --backup only Google Drive will be cleaned up")
+	ratio        = flag.Int("ratio", 3, "lz4 compression ratio to use")
 )
+
+var backend  Backend.Backend
+var glue *Backend.Glue
+
+func isGDrive() bool {
+	if strings.HasPrefix(*folder, "gdrive:") {
+		return true
+	}
+	return false
+}
+
+func isSSH() bool {
+	if match, _ := regexp.MatchString(`(?mi)^([^@]+)@([^:]+):(.*)$`, *folder); match {
+		return true
+	}
+	return false
+}
+
+func isLocal() bool {
+	if !isGDrive() && !isSSH() {
+		return true
+	}
+	return false
+}
+
+func initBackend(client *api.Client) {
+	var err error
+	switch {
+	case isGDrive():
+		backend, err = GoogleDrive.Init(client)
+		if err != nil {
+			log.WithField("error", err).Fatal()
+		}
+	case isSSH():
+	case isLocal():
+		fallthrough
+	default:
+
+	}
+	if backend != nil {
+		glue = Backend.CreateGlue(&backend)
+	}
+	log.
+		WithField("backend", fmt.Sprintf("%+v", backend)).
+		WithField("glue", fmt.Sprintf("%+v", glue)).Info()
+}
 
 func main() {
 	flag.Parse()
 	runtime.GOMAXPROCS(runtime.NumCPU())
+
+	log.WithField("isSSH", isSSH()).WithField("isGDrive", isGDrive()).WithField("isLocal", isLocal()).Info()
 
 	vaultAddrEnv := os.Getenv("VAULT_ADDR")
 	vaultTokenEnv := os.Getenv("VAULT_TOKEN")
@@ -56,18 +108,31 @@ func main() {
 		vaultClient, err := api.NewClient(&vaultConfig)
 		if err != nil {
 			log.Errorln(err)
-			// Try a regular Google Drive init as a fail-safe
-			GoogleDrive.InitGoogleDrive(nil)
+			// Try a regular init as a fail-safe
+			initBackend(nil)
 		}
 		vaultClient.SetToken(*vaultToken)
-
-		GoogleDrive.InitGoogleDrive(vaultClient)
+		initBackend(nil)
 	} else {
-		GoogleDrive.InitGoogleDrive(nil)
+		initBackend(nil)
 	}
 
+	//TODO: NEW HACK FOR NOW!
+	var drive GoogleDrive.GoogleDrive
+	var isDrive bool
+	if drive, isDrive = backend.(GoogleDrive.GoogleDrive); isDrive {
+		log.Infoln("Detected GoogleDrive")
+	} else {
+		log.Fatalln("NO GDrive")
+	}
+	// END HACK
+
 	if *quota {
-		GoogleDrive.DisplayQuota()
+		if isGDrive() {
+			glue.DisplayQuota()
+		} else {
+			log.WithField("error", "Quota not supported for SCP backend").Error()
+		}
 	}
 
 	if *backup != "" {
@@ -88,8 +153,11 @@ func main() {
 
 	switch {
 	case *list:
-		parent := GoogleDrive.FindOrCreateFolder(*folder)
-		GoogleDrive.ListFiles(parent)
+		if isGDrive() {
+			drive.ListFiles(*folder)
+		} else {
+			log.WithField("error", "List not supported for SCP backend").Error()
+		}
 		os.Exit(0)
 	case *chain:
 		chainCommand()
@@ -108,8 +176,7 @@ func main() {
 		if *folder == "" {
 			log.Fatalln("Must specify --folder")
 		}
-		parent := GoogleDrive.FindOrCreateFolder(*folder)
-		snapshot, err := GoogleDrive.FetchLatest(parent, *subvolume)
+		snapshot, err := drive.FetchLatest(*folder, *subvolume)
 		fmt.Println(snapshot, err)
 	case *quota:
 		// NOOP
@@ -122,8 +189,7 @@ func main() {
 		if *folder == "" {
 			log.Fatalln("Must specify --folder")
 		}
-		parent := GoogleDrive.FindOrCreateFolder(*folder)
-		GoogleDrive.Cleanup(parent, *subvolume)
+		drive.Cleanup(*folder, *subvolume)
 	default:
 		log.Fatalln("Please select an option")
 	}

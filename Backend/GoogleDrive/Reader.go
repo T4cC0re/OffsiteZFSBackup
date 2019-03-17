@@ -3,6 +3,8 @@ package GoogleDrive
 import (
 	"errors"
 	"github.com/dustin/go-humanize"
+	log "github.com/sirupsen/logrus"
+	"gitlab.com/T4cC0re/OffsiteZFSBackup/Common"
 	"golang.org/x/net/context"
 	"google.golang.org/api/drive/v3"
 	"io"
@@ -10,7 +12,6 @@ import (
 	"os"
 	"strconv"
 	"time"
-	"github.com/prometheus/common/log"
 )
 
 const READ_CACHE_FILENAME = "OZBReadCache"
@@ -22,6 +23,7 @@ var E_READ_TOO_SHORT = errors.New("data read from cache smaller than expected")
 
 type Reader struct {
 	io.Reader
+	drive 	  *GoogleDrive
 	cache     *os.File
 	chunkPos  int64
 	Total     int64
@@ -34,7 +36,7 @@ type Reader struct {
 	hitEOF    bool
 }
 
-func NewGoogleDriveReader(meta *Metadata, tmpBase string) (*Reader, error) {
+func NewGoogleDriveReader(drive *GoogleDrive, meta *Common.Metadata, tmpBase string) (*Reader, error) {
 	if tmpBase == "" {
 		stat, err := os.Stat("/dev/shm")
 		if err == nil && stat.IsDir() {
@@ -62,10 +64,10 @@ func NewGoogleDriveReader(meta *Metadata, tmpBase string) (*Reader, error) {
 	if err != nil {
 		return nil, err
 	}
-	reader := &Reader{cache: cache, chunkPos: 0, chunk: 0, uuid: meta.Uuid, closed: false, chunkSize: make(map[uint]int64), fileIDs: make(map[uint]string), fileMD5s: make(map[uint]string), hitEOF: false}
+	reader := &Reader{drive: drive, cache: cache, chunkPos: 0, chunk: 0, uuid: meta.Uuid, closed: false, chunkSize: make(map[uint]int64), fileIDs: make(map[uint]string), fileMD5s: make(map[uint]string), hitEOF: false}
 
 	// TODO: Limit fields to fetch!
-	err = srv.Files.
+	err = reader.drive.srv.Files.
 		List().
 		Fields("nextPageToken, files").
 		Q("properties has { key='OZB_uuid' and value='"+meta.Uuid+"' } AND properties has { key='OZB_type' and value='data' }").
@@ -82,7 +84,7 @@ func NewGoogleDriveReader(meta *Metadata, tmpBase string) (*Reader, error) {
 			maxIndex = index
 		}
 	}
-	if len(reader.fileIDs) != int(maxIndex+1) || uint(len(reader.fileIDs)) != meta.Chunks {
+	if len(reader.fileIDs) != int(maxIndex+1) || uint64(len(reader.fileIDs)) != meta.Chunks {
 		return nil, E_CHUNKS_MISSING
 	}
 
@@ -112,7 +114,7 @@ func (this *Reader) gatherChunkInfo(fileList *drive.FileList) error {
 func (this *Reader) download(chunk uint) error {
 	for {
 		log.Infof( "Downloading chunk %d...", chunk)
-		size, err := Download(this.fileIDs[chunk], this.fileMD5s[chunk], this.cache)
+		size, err := this.drive.Download(this.fileIDs[chunk], this.fileMD5s[chunk], this.cache)
 		if err != nil {
 			log.Errorf("Download of chunk %d failed. %s Retrying...", chunk, err.Error())
 			time.Sleep(5 * time.Second)

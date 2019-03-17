@@ -3,15 +3,16 @@ package ZFS
 import (
 	"bytes"
 	"fmt"
+	log "github.com/sirupsen/logrus"
+	"gitlab.com/T4cC0re/OffsiteZFSBackup/Backend"
 	"io"
-	"github.com/prometheus/common/log"
 	"os"
 	"os/exec"
 	"strings"
 	"time"
 
-	"../Common"
-	"../GoogleDrive"
+	"gitlab.com/T4cC0re/OffsiteZFSBackup/Backend/GoogleDrive"
+	"gitlab.com/T4cC0re/OffsiteZFSBackup/Common"
 )
 
 type Manager struct {
@@ -19,9 +20,21 @@ type Manager struct {
 	parent string
 }
 
-func NewManager(folder string) *Manager {
+func NewManager(folder string, backend *Backend.Backend) *Manager {
 	this := &Manager{}
-	this.parent = GoogleDrive.FindOrCreateFolder(folder)
+
+	//TODO: NEW HACK FOR NOW!
+	var drive GoogleDrive.GoogleDrive
+	var isDrive bool
+	b2 := *backend
+	if drive, isDrive = b2.(GoogleDrive.GoogleDrive); isDrive {
+		log.Infoln("Detected GoogleDrive")
+	} else {
+		log.Fatalln("NO GDrive")
+	}
+	// END HACK
+
+	this.parent = drive.FindOrCreateFolder(folder)
 	return this
 }
 

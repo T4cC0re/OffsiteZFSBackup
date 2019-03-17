@@ -1,8 +1,9 @@
 package Abstractions
 
 import (
-	"../Common"
-	"../GoogleDrive"
+	"gitlab.com/T4cC0re/OffsiteZFSBackup/Backend"
+	"gitlab.com/T4cC0re/OffsiteZFSBackup/Common"
+	"gitlab.com/T4cC0re/OffsiteZFSBackup/Backend/GoogleDrive"
 	"crypto/cipher"
 	"encoding/hex"
 	"errors"
@@ -16,7 +17,7 @@ import (
 )
 
 type Downloader struct {
-	metadata    *GoogleDrive.Metadata
+	metadata    *Common.Metadata
 	multiWriter io.Writer
 	readProxy   *ReadProxy
 	zr          *lz4.Reader
@@ -30,16 +31,26 @@ type Downloader struct {
 var E_HMAC_MISMATCH = errors.New("HMACs do not match. File has been tampered with, or was not transferred correctly")
 var E_NO_DATA = errors.New("data is 0 bytes")
 
-func NewDownloader(w io.Writer, folder string, filename string, passphrase string, tmpdir string) (*Downloader, error) {
+func NewDownloader(backend *Backend.Backend, w io.Writer, folder string, filename string, passphrase string, tmpdir string) (*Downloader, error) {
 	this := &Downloader{}
 
 	var writers []io.Writer
 
-	parent := GoogleDrive.FindOrCreateFolder(folder)
+
+	//TODO: NEW HACK FOR NOW!
+	var drive GoogleDrive.GoogleDrive
+	var isDrive bool
+	b2 := *backend
+	if drive, isDrive = b2.(GoogleDrive.GoogleDrive); isDrive {
+		log.Infoln("Detected GoogleDrive")
+	} else {
+		log.Fatalln("NO GDrive")
+	}
+	// END HACK
 
 	log.Infoln("Fetching metadata...")
 	var err error
-	this.metadata, err = GoogleDrive.FetchMetadata(filename, parent)
+	this.metadata, err = drive.FetchMetadata(filename, folder)
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +66,7 @@ func NewDownloader(w io.Writer, folder string, filename string, passphrase strin
 
 	this.mac, this.keyStream = Common.PrepareMACAndEncryption(authenticationKey, encryptionKey, iv, this.metadata.Authentication, this.metadata.Encryption, true)
 
-	this.downloader, err = GoogleDrive.NewGoogleDriveReader(this.metadata, tmpdir)
+	this.downloader, err = GoogleDrive.NewGoogleDriveReader(&drive, this.metadata, tmpdir)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -82,7 +93,7 @@ func (this *Downloader) close() error {
 	return this.downloader.Close()
 }
 
-func (this *Downloader) Download() (*GoogleDrive.Metadata, error) {
+func (this *Downloader) Download() (*Common.Metadata, error) {
 	if _, err := io.Copy(this.multiWriter, this.zr); err != nil {
 		if err == lz4.ErrInvalid {
 			return nil, errors.New("lz4 data cannot be decompressed. The file has been tampered with or the encryption-key is incorrect")
